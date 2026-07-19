@@ -1,0 +1,14 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "paar"
+  site-url: "https://vedicreader.github.io/paar"
+  description: "live lazy variable inspector for python"
+  repo-branch: main
+  repo-url: "https://github.com/vedicreader/paar"
+
+format-links:
+  - html
+  - format: commonmark
+    text: Markdown

@@ -1,0 +1,1 @@
+{"app": "", "envs": {}, "health_path": "/health", "test_cmd": null, "env_schema": {}, "hooks": {}, "lfs": ["*.db", "*.onnx", "*.bin", "*.pt", "*.pkl", "*.safetensors", "*.tar.gz", "*.mp4", "*.parquet"], "workflows": {}, "workflow_preset": null, "deploy_cmd": null, "extra_jobs": {}, "deploys": {}, "deploy_pkg": null}
