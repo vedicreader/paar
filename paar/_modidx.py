@@ -8,4 +8,6 @@ d = { 'settings': { 'branch': 'main',
   'syms': { 'paar.core': {'paar.core.VarInfo': ('core.html#varinfo', 'paar/core.py')},
             'paar.reprs': { 'paar.reprs.get_dtype': ('reprs.html#get_dtype', 'paar/reprs.py'),
                             'paar.reprs.get_shape': ('reprs.html#get_shape', 'paar/reprs.py'),
-                            'paar.reprs.safe_repr': ('reprs.html#safe_repr', 'paar/reprs.py')}}}
+                            'paar.reprs.safe_repr': ('reprs.html#safe_repr', 'paar/reprs.py')},
+            'paar.snapshot': { 'paar.snapshot._var_info': ('snapshot.html#_var_info', 'paar/snapshot.py'),
+                               'paar.snapshot.snapshot': ('snapshot.html#snapshot', 'paar/snapshot.py')}}}
