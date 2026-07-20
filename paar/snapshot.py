@@ -32,7 +32,7 @@ def snapshot(ns, hidden=frozenset()):
     return [_var_info(k, ns[k], (k,), k) for k in keys]
 
 def _walk(ns, accessor):
-    "Resolve a positional accessor (name, *idxs) to (object, readable_path). Raises on bad path."
+    "Resolve a positional accessor (name, *idxs) to (object, readable_path). Raises KeyError/IndexError on bad path."
     name, *idxs = accessor
     obj, path = ns[name], name
     for i in idxs:

@@ -22,8 +22,9 @@ class ListTupleResolver(Resolver):
     def children(self, v): return [(str(i), f'[{i}]', x) for i,x in enumerate(v)]
 
 class SetResolver(Resolver):
+    "Sets: positional children in a stable order (sorted by repr); path fragment is display-only, not index-addressable."
     def can(self, v): return isinstance(v, (set, frozenset))
-    def children(self, v): return [(str(i), f'[{i}]', x) for i,x in enumerate(v)]
+    def children(self, v): return [(str(i), f'[{i}]', x) for i,x in enumerate(sorted(v, key=repr))]
 
 class ObjectResolver(Resolver):
     def can(self, v): return hasattr(v, '__dict__') and bool(vars(v))

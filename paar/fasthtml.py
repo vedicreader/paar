@@ -30,12 +30,13 @@ def _badges(v:VarInfo):
 
 def _acc(accessor):
     "URL-safe encoding of a positional accessor."
-    return quote(json.dumps(list(accessor)))
+    return quote(json.dumps(list(accessor)), safe='')
 
 def _node(v:VarInfo):
     "Render one VarInfo as a tree node; containers get a ▸ toggle that lazily loads children."
+    b = _badges(v)
     head = Span(Strong(v.name), ' ', Small(v.type, title=v.qualifier), ' ',
-                Code(v.value), (' ' + _badges(v)) if _badges(v) else '',
+                Code(v.value), (' ' + b) if b else '',
                 cls=('error' if v.is_error else None))
     if v.is_container:
         toggle = Span('▸', cls='paar-toggle', hx_get=f'/expand?accessor={_acc(v.accessor)}',
