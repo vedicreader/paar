@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "fastcore>=2.1.3",
+    "ipython>=8.39.0",
     "litesearch>=0.0.34",
     "python-fasthtml>=0.14.9",
 ]
