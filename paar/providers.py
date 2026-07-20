@@ -32,7 +32,7 @@ def provided_str(v):
         try:
             if isinstance(v, typ): return fn(v)
         except Exception:
-            return None
+            continue
     return None
 
 def value_str(v):
@@ -42,7 +42,7 @@ def value_str(v):
 
 def _bytes_str(b):
     h = bytes(b[:8]).hex()
-    return f'{h}\u2026 ({len(b)} bytes)' if len(b) > 8 else f'{h} ({len(b)} bytes)'
+    return f'{h}… ({len(b)} bytes)' if len(b) > 8 else f'{h} ({len(b)} bytes)'
 
 register_str_provider(pathlib.Path, lambda p: str(p))
 register_str_provider(datetime.date, lambda d: d.isoformat())
@@ -55,5 +55,5 @@ register_str_provider(bytearray, _bytes_str)
 if np is not None:
     register_str_provider(np.ndarray, lambda a: f'ndarray shape={tuple(a.shape)} {a.dtype}')
 if pd is not None:
-    register_str_provider(pd.DataFrame, lambda d: f'DataFrame [{d.shape[0]}\u00d7{d.shape[1]}]')
+    register_str_provider(pd.DataFrame, lambda d: f'DataFrame [{d.shape[0]}×{d.shape[1]}]')
     register_str_provider(pd.Series, lambda s: f'Series [{s.shape[0]}] {s.dtype}')
