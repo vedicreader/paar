@@ -43,4 +43,6 @@ d = { 'settings': { 'branch': 'main',
                                 'paar.resolvers.SetResolver.children': ('resolvers.html#setresolver.children', 'paar/resolvers.py'),
                                 'paar.resolvers.resolve_for': ('resolvers.html#resolve_for', 'paar/resolvers.py')},
             'paar.snapshot': { 'paar.snapshot._var_info': ('snapshot.html#_var_info', 'paar/snapshot.py'),
+                               'paar.snapshot._walk': ('snapshot.html#_walk', 'paar/snapshot.py'),
+                               'paar.snapshot.expand': ('snapshot.html#expand', 'paar/snapshot.py'),
                                'paar.snapshot.snapshot': ('snapshot.html#snapshot', 'paar/snapshot.py')}}}
