@@ -68,7 +68,7 @@ def _broadcast(fragment):
     for loop, send in targets:
         try: fut = asyncio.run_coroutine_threadsafe(send(fragment), loop)
         except Exception: _drop(send); continue
-        fut.add_done_callback(lambda f, s=send: f.exception() is not None and _drop(s))
+        fut.add_done_callback(lambda f, s=send: (not f.cancelled()) and f.exception() is not None and _drop(s))
 
 def inspector(port=8000, height=520):
     "Start the in-kernel live inspector panel and return the inline iframe."
