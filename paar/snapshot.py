@@ -64,7 +64,7 @@ def grid_page(ns, accessor, roff=0, coff=0, rows=50, cols=50):
     "Walk accessor to a gridable object and return a page dict, or None."
     try:
         obj, _ = _walk(ns, tuple(accessor))
+        if not is_gridable(obj): return None
+        return array_page(obj, roff, coff, rows, cols)
     except Exception:
         return None
-    if not is_gridable(obj): return None
-    return array_page(obj, roff, coff, rows, cols)

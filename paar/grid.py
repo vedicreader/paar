@@ -23,7 +23,7 @@ def is_gridable(v):
 def _cell(x): return safe_repr(x, 40)
 
 def array_page(v, roff=0, coff=0, rows=50, cols=50):
-    "Page a gridable value -> dict(headers,index,cells,nrows,ncols,roff,coff), or None."
+    "Page a gridable value -> dict(headers,index,cells,nrows,ncols,roff,coff,rows,cols), or None."
     if pd is not None and isinstance(v, pd.DataFrame):
         nrows, ncols = v.shape
         sub = v.iloc[roff:roff+rows, coff:coff+cols]
@@ -51,4 +51,5 @@ def array_page(v, roff=0, coff=0, rows=50, cols=50):
     else:
         return None
     return {'headers': headers, 'index': index, 'cells': cells,
-            'nrows': nrows, 'ncols': ncols, 'roff': roff, 'coff': coff}
+            'nrows': nrows, 'ncols': ncols, 'roff': roff, 'coff': coff,
+            'rows': rows, 'cols': cols}

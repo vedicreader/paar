@@ -66,13 +66,14 @@ def _grid_nav(page, acc):
     roff, coff = page['roff'], page['coff']
     npr, npc = len(page['index']), len(page['headers'])
     nrows, ncols = page['nrows'], page['ncols']
+    pr, pc = page['rows'], page['cols']
     def lnk(label, ro, co):
         return A(label, hx_get=f'/grid?accessor={_acc(acc)}&roff={ro}&coff={co}',
                  hx_target='closest .paar-children', hx_swap='innerHTML', cls='paar-page')
     ctrls = []
-    if roff > 0: ctrls.append(lnk('◀ rows', max(0, roff-npr), coff))
+    if roff > 0: ctrls.append(lnk('◀ rows', max(0, roff-pr), coff))
     if roff+npr < nrows: ctrls.append(lnk('rows ▶', roff+npr, coff))
-    if coff > 0: ctrls.append(lnk('◀ cols', roff, max(0, coff-npc)))
+    if coff > 0: ctrls.append(lnk('◀ cols', roff, max(0, coff-pc)))
     if coff+npc < ncols: ctrls.append(lnk('cols ▶', roff, coff+npc))
     info = Small(f'rows {roff}-{roff+npr} of {nrows}, cols {coff}-{coff+npc} of {ncols}')
     return Div(info, ' ', *ctrls, cls='paar-gridnav')
