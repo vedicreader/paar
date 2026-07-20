@@ -54,6 +54,8 @@ register_str_provider(bytes, _bytes_str)
 register_str_provider(bytearray, _bytes_str)
 if np is not None:
     register_str_provider(np.ndarray, lambda a: f'ndarray shape={tuple(a.shape)} {a.dtype}')
+    register_str_provider(np.generic, lambda x: str(x))   # numpy scalars -> clean 0 / 1.5 / True
+    register_str_provider(np.dtype, lambda d: str(d))     # int64, not dtype('int64')
 if pd is not None:
     register_str_provider(pd.DataFrame, lambda d: f'DataFrame [{d.shape[0]}×{d.shape[1]}]')
     register_str_provider(pd.Series, lambda s: f'Series [{s.shape[0]}] {s.dtype}')

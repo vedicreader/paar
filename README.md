@@ -48,16 +48,6 @@ $ pip install paar
 
 Documentation can be found hosted on this GitHub [repository](https://github.com/vedicreader/paar)’s [pages](https://vedicreader.github.io/paar/). Additionally you can find package manager specific guidelines on [conda](https://anaconda.org/vedicreader/paar) and [pypi](https://pypi.org/project/paar/) respectively.
 
-## How to use
-
-Fill me in please! Don’t forget code examples:
-
-``` python
-1+1
-```
-
-    2
-
 ## Live demo
 
 ``` python
@@ -86,6 +76,10 @@ df = pd.DataFrame({'x': range(5), 'y': list('abcde')})
 
 ``` python
 data['d'] = list(range(1000))   # run this; the panel above updates without re-running inspector()
+```
+
+``` python
+from litesearch import *
 ```
 
 **Viewing modes** (all from the one in-kernel server):
