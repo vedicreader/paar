@@ -24,6 +24,7 @@ class VarInfo:
     is_error:bool=False
     path:str=''
     accessor:tuple=()
+    more_offset:int|None=None   # set on the load-more sentinel: next offset to expand from
 
 # %% auto #0
 __all__ = ['LAZY', 'VarInfo']

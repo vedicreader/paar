@@ -80,8 +80,16 @@ def _grid_toggle(v):
                 hx_target='next .paar-gridbox', hx_swap='innerHTML', hx_trigger='click once'),
         Div(cls='paar-gridbox'), cls='paar-node paar-gridtoggle')
 
+def _more(v:VarInfo):
+    "The load-more sentinel: clicking it swaps itself for the next page of children."
+    return Div(Span(f'… {v.value}', cls='paar-grid-label'),
+               hx_get=f'/expand?accessor={_acc(v.accessor)}&offset={v.more_offset}',
+               hx_target='this', hx_swap='outerHTML', hx_trigger='click',
+               cls='paar-node paar-leaf paar-more-row')
+
 def _node(v:VarInfo):
-    "Render a tree node: containers expand; gridables also get a collapsible grid; scalars are plain."
+    "Render a tree node: the load-more sentinel fetches the next page; containers expand; gridables also get a collapsible grid; scalars are plain."
+    if v.more_offset is not None: return _more(v)
     head = _head(v)
     if v.is_container:
         body = [_grid_toggle(v)] if v.is_grid else []   # grid toggle sits above the tree children
@@ -162,8 +170,9 @@ def rows(profile:str=None):
     return _rows_div()
 
 @rt('/expand')
-def expand_route(accessor:str):
-    return Div(*[_node(v) for v in bridge.expand(tuple(json.loads(accessor)))])
+def expand_route(accessor:str, offset:int=0):
+    # flat fragment: innerHTML on first open, or outerHTML replacing the load-more sentinel on a page click
+    return tuple(_node(v) for v in bridge.expand(tuple(json.loads(accessor)), offset))
 
 @rt('/grid')
 def grid_route(accessor:str, roff:int=0, coff:int=0):

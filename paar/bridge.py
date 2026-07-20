@@ -24,7 +24,7 @@ class Bridge:
     "Frontend-agnostic access to the live kernel namespace."
     def snapshot(self): return snapshot(_ns(), _hidden())
     def view(self, profile='standard'): return profile_view(_ns(), _hidden(), profile)
-    def expand(self, accessor): return expand(_ns(), accessor)
+    def expand(self, accessor, offset=0): return expand(_ns(), accessor, offset)
     def grid(self, accessor, roff=0, coff=0, rows=50, cols=50): return grid_page(_ns(), accessor, roff, coff, rows, cols)
 
 def on_change(cb):

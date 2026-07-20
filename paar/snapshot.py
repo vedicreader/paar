@@ -14,7 +14,7 @@ from .resolvers import resolve_for
 from .grid import is_gridable, array_page
 from .providers import value_str
 
-MAX_CHILDREN = 100
+MAX_CHILDREN = 100   # page size for one expand call
 
 def _var_info(name, v, accessor, path):
     "Build a VarInfo for one value at the given accessor/path."
@@ -44,8 +44,8 @@ def _walk(ns, accessor):
         path += step
     return obj, path
 
-def expand(ns, accessor):
-    "Return one level of children of the value at accessor, as VarInfo (capped at MAX_CHILDREN)."
+def expand(ns, accessor, offset=0, limit=MAX_CHILDREN):
+    "One level of children of the value at accessor as VarInfo, windowed to kids[offset:offset+limit]; a load-more sentinel (more_offset set) trails a partial window."
     try:
         obj, path = _walk(ns, tuple(accessor))
     except Exception:
@@ -53,11 +53,11 @@ def expand(ns, accessor):
     r = resolve_for(obj)
     if r is None: return []
     kids = r.children(obj)
-    out = [_var_info(nm, child, tuple(accessor)+(i,), path+step)
-           for i,(nm, step, child) in enumerate(kids[:MAX_CHILDREN])]
-    if len(kids) > MAX_CHILDREN:
-        out.append(VarInfo(name='…', type='', value=f'{len(kids)-MAX_CHILDREN} more',
-                           path=path, accessor=tuple(accessor)))
+    out = [_var_info(nm, child, tuple(accessor)+(offset+i,), path+step)
+           for i,(nm, step, child) in enumerate(kids[offset:offset+limit])]
+    if len(kids) > offset+limit:
+        out.append(VarInfo(name='…', type='', value=f'{len(kids)-(offset+limit)} more',
+                           path=path, accessor=tuple(accessor), more_offset=offset+limit))
     return out
 
 def grid_page(ns, accessor, roff=0, coff=0, rows=50, cols=50):
@@ -73,20 +73,21 @@ def grid_page(ns, accessor, roff=0, coff=0, rows=50, cols=50):
 import inspect
 
 def category(name, v, hidden=frozenset()):
-    "Classify a namespace entry: 'special' | 'module' | 'function' | 'data'."
+    "Classify a namespace entry: 'special' | 'module' | 'type' | 'function' | 'data'."
     if name in hidden or name.startswith('_') or name in ('In','Out','exit','quit','get_ipython'):
         return 'special'
     if inspect.ismodule(v): return 'module'
-    if callable(v) and not isinstance(v, type): return 'function'
+    if isinstance(v, type): return 'type'
+    if callable(v): return 'function'
     return 'data'
 
-GROUPS = {'special':'Special Variables', 'function':'Functions', 'module':'Modules'}
+GROUPS = {'special':'Special Variables', 'type':'Types', 'function':'Functions', 'module':'Modules'}
 
 # profile -> per-category disposition: 'top' | 'group' | 'hidden' ('data' is always top-level)
 PROFILES = {
-    'minimal':  {'function':'hidden', 'module':'hidden', 'special':'hidden'},
-    'standard': {'function':'group',  'module':'group',  'special':'group'},
-    'full':     {'function':'top',    'module':'top',    'special':'group'},
+    'minimal':  {'type':'hidden', 'function':'hidden', 'module':'hidden', 'special':'hidden'},
+    'standard': {'type':'group',  'function':'group',  'module':'group',  'special':'group'},
+    'full':     {'type':'top',    'function':'top',    'module':'top',    'special':'group'},
 }
 
 def profile_view(ns, hidden=frozenset(), profile='standard'):
@@ -96,7 +97,7 @@ def profile_view(ns, hidden=frozenset(), profile='standard'):
     for k in sorted(ns):
         cats.setdefault(category(k, ns[k], hidden), []).append(_var_info(k, ns[k], (k,), k))
     out = [(None, cats.get('data', []))]
-    for c in ('module', 'function', 'special'):
+    for c in ('module', 'type', 'function', 'special'):
         vs = cats.get(c)
         if not vs: continue
         d = disp.get(c, 'group')
