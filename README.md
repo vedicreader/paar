@@ -67,7 +67,7 @@ inspector()          # panel renders inline; keep this cell's output visible
 
 ``` python
 import math
-data = {'a': 1, 'b': [1,2,3], 'c': 'hello', 'pi': math.pi}
+data = {'a': 1, 'b': [1, 2, {'deep': [10, 20]}], 'c': 'hello', 'pi': math.pi}
 ```
 
 ``` python
@@ -78,3 +78,7 @@ data['d'] = list(range(1000))   # run this; the panel above updates without re-r
 - **Inline:** the [`inspector()`](https://vedicreader.github.io/paar/fasthtml.html#inspector) cell output above updates live after every cell — you do not re-run it.
 - **Docked side panel (JupyterLab):** right-click the [`inspector()`](https://vedicreader.github.io/paar/fasthtml.html#inspector) output → *Create New View for Cell Output* → drag into a split pane.
 - **Full window:** open <http://localhost:8000/> or click the *open in browser* link.
+
+Click the ▸ toggle on any container row (dict / list / tuple / set / object) to load its
+children one level at a time. Nested containers keep their own toggles, so you can drill in
+as deep as the data goes — e.g. `data` → `'b'` → `[2]` → `'deep'`.
