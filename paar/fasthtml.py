@@ -8,7 +8,7 @@ Docs: https://vedicreader.github.io/paar/fasthtml.html.md"""
 __all__ = ['bridge', 'app', 'home', 'rows', 'live', 'inspector']
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
-import asyncio
+import asyncio, threading
 from fasthtml.common import *
 from fasthtml.jupyter import JupyUvi, HTMX
 from .bridge import Bridge, on_change
@@ -17,6 +17,7 @@ from .core import VarInfo
 bridge = Bridge()
 app = FastHTML(exts='ws')   # bundles htmx-ext-ws from fasthtml.htmx_exts; pico on by default
 _clients = []   # list[(loop, send)]
+_clients_lock = threading.Lock()
 _server = None
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-rows
@@ -48,25 +49,26 @@ def home():
 @app.get('/rows')
 def rows(): return _rows_div()
 
-async def _conn(send): _clients.append((asyncio.get_running_loop(), send))
-async def _disconn(send):
-    global _clients
-    _clients = [(l,s) for (l,s) in _clients if s is not send]
+def _drop(send):
+    "Remove a client by its send identity (thread-safe)."
+    with _clients_lock:
+        _clients[:] = [(l,s) for (l,s) in _clients if s is not send]
+
+async def _conn(send):
+    with _clients_lock: _clients.append((asyncio.get_running_loop(), send))
+async def _disconn(send): _drop(send)
 
 @app.ws('/live', conn=_conn, disconn=_disconn)
 async def live(send): pass
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-broadcast
 def _broadcast(fragment):
-    "Push fragment to every WS client from any thread; drop dead clients."
-    global _clients
-    alive=[]
-    for loop, send in list(_clients):
-        try:
-            asyncio.run_coroutine_threadsafe(send(fragment), loop); alive.append((loop, send))
-        except Exception:
-            pass
-    _clients = alive
+    "Push fragment to every WS client from any thread; drop clients that fail."
+    with _clients_lock: targets = list(_clients)
+    for loop, send in targets:
+        try: fut = asyncio.run_coroutine_threadsafe(send(fragment), loop)
+        except Exception: _drop(send); continue
+        fut.add_done_callback(lambda f, s=send: f.exception() is not None and _drop(s))
 
 def inspector(port=8000, height=520):
     "Start the in-kernel live inspector panel and return the inline iframe."
