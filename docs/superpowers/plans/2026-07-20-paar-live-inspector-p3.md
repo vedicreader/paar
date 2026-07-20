@@ -28,19 +28,15 @@
 
 **Files:**
 - Create: `nbs/06_grid.ipynb` → exports `paar/grid.py`
-- Modify: `pyproject.toml` (add `numpy` + `pandas` to the dev group via `uv add --dev numpy pandas`)
 - Test: cells in `nbs/06_grid.ipynb`
 
 **Interfaces:**
 - Consumes: `paar.reprs.safe_repr`.
 - Produces: `is_gridable(v) -> bool`; `array_page(v, roff=0, coff=0, rows=50, cols=50) -> dict|None` with keys `headers:list[str]`, `index:list[str]`, `cells:list[list[str]]`, `nrows:int`, `ncols:int`, `roff:int`, `coff:int`. Returns `None` for non-gridable input.
 
-- [ ] **Step 1: Add the dev dependencies**
+Note: `numpy` and `pandas` are already declared as project dependencies and installed in the venv — do NOT run `uv add`. `grid.py` still import-guards them (`np`/`pd` may be `None`) so the module imports cleanly even if they were ever absent.
 
-Run: `uv add --directory /Users/71293/code/personal/orgs/paar --dev numpy pandas`
-Expected: `numpy` and `pandas` added under `[dependency-groups] dev` in `pyproject.toml` (already installed in the venv).
-
-- [ ] **Step 2: Write the failing tests**
+- [ ] **Step 1: Write the failing tests**
 
 New notebook `nbs/06_grid.ipynb`, first cell `#| default_exp grid`, then a test cell:
 
@@ -80,11 +76,11 @@ for t in [test_is_gridable,test_page_ndarray_2d,test_page_ndarray_1d,test_page_d
           test_page_series,test_page_paging_offsets,test_page_non_gridable_none]: t()
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [ ] **Step 2: Run to verify it fails**
 
 Run the cell. Expected: `ImportError: cannot import name 'is_gridable'`.
 
-- [ ] **Step 4: Write minimal implementation**
+- [ ] **Step 3: Write minimal implementation**
 
 Export cell (use `from paar.reprs import safe_repr` in the notebook):
 
@@ -136,15 +132,15 @@ def array_page(v, roff=0, coff=0, rows=50, cols=50):
             'nrows': nrows, 'ncols': ncols, 'roff': roff, 'coff': coff}
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [ ] **Step 4: Run to verify it passes**
 
 Run: `uv run --directory /Users/71293/code/personal/orgs/paar nbdev-prepare`
 Expected: `paar/grid.py` generated; all seven asserts pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add nbs/06_grid.ipynb paar/grid.py paar/_modidx.py pyproject.toml uv.lock && git commit -m "feat(grid): numpy/pandas gridable detection + paging"
+git add nbs/06_grid.ipynb paar/grid.py paar/_modidx.py && git commit -m "feat(grid): numpy/pandas gridable detection + paging"
 ```
 
 ---
