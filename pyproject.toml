@@ -15,7 +15,12 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
 ]
-dependencies = []
+dependencies = [
+    "fastcore>=2.1.3",
+    "ipython>=8.39.0",
+    "litesearch>=0.0.34",
+    "python-fasthtml>=0.14.9",
+]
 
 [project.urls]
 Repository = "https://github.com/vedicreader/paar"
@@ -34,3 +39,11 @@ include = ["/paar", "/README.md", "/pyproject.toml"]
 
 [tool.hatch.version]
 path = "paar/__init__.py"
+
+[dependency-groups]
+dev = [
+    "fossick>=0.0.10",
+    "koshas>=0.0.27",
+    "nbdev>=3.2.2",
+    "notebook>=7.6.0",
+]

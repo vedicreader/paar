@@ -57,3 +57,24 @@ Fill me in please! Don’t forget code examples:
 ```
 
     2
+
+## Live demo
+
+``` python
+from paar.fasthtml import inspector
+inspector()          # panel renders inline; keep this cell's output visible
+```
+
+``` python
+import math
+data = {'a': 1, 'b': [1,2,3], 'c': 'hello', 'pi': math.pi}
+```
+
+``` python
+data['d'] = list(range(1000))   # run this; the panel above updates without re-running inspector()
+```
+
+**Viewing modes** (all from the one in-kernel server):
+- **Inline:** the [`inspector()`](https://vedicreader.github.io/paar/fasthtml.html#inspector) cell output above updates live after every cell — you do not re-run it.
+- **Docked side panel (JupyterLab):** right-click the [`inspector()`](https://vedicreader.github.io/paar/fasthtml.html#inspector) output → *Create New View for Cell Output* → drag into a split pane.
+- **Full window:** open <http://localhost:8000/> or click the *open in browser* link.
