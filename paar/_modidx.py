@@ -5,4 +5,4 @@ d = { 'settings': { 'branch': 'main',
                 'doc_host': 'https://vedicreader.github.io',
                 'git_url': 'https://github.com/vedicreader/paar',
                 'lib_path': 'paar'},
-  'syms': {'paar.core': {'paar.core.foo': ('core.html#foo', 'paar/core.py')}}}
+  'syms': {'paar.core': {'paar.core.VarInfo': ('core.html#varinfo', 'paar/core.py')}}}
