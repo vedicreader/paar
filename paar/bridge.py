@@ -8,7 +8,7 @@ Docs: https://vedicreader.github.io/paar/bridge.html.md"""
 __all__ = ['Bridge', 'on_change']
 
 # %% ../nbs/04_bridge.ipynb #a0000020
-from .snapshot import snapshot, expand
+from .snapshot import snapshot, expand, grid_page
 try: from IPython import get_ipython
 except Exception:
     def get_ipython(): return None
@@ -24,6 +24,7 @@ class Bridge:
     "Frontend-agnostic access to the live kernel namespace."
     def snapshot(self): return snapshot(_ns(), _hidden())
     def expand(self, accessor): return expand(_ns(), accessor)
+    def grid(self, accessor, roff=0, coff=0, rows=50, cols=50): return grid_page(_ns(), accessor, roff, coff, rows, cols)
 
 def on_change(cb):
     "Register cb() to fire after each cell execution; returns False outside IPython."
