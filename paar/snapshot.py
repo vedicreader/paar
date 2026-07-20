@@ -9,21 +9,21 @@ __all__ = ['MAX_CHILDREN', 'snapshot', 'expand', 'grid_page']
 
 # %% ../nbs/03_snapshot.ipynb #a0000020
 from .core import VarInfo
-from .reprs import safe_repr, get_shape, get_dtype
+from .reprs import get_shape, get_dtype
 from .resolvers import resolve_for
 from .grid import is_gridable, array_page
+from .providers import value_str
 
 MAX_CHILDREN = 100
 
 def _var_info(name, v, accessor, path):
     "Build a VarInfo for one value at the given accessor/path."
     try:
-        gridable = is_gridable(v)
         return VarInfo(name=name, type=type(v).__name__,
                        qualifier=getattr(type(v), '__module__', '') or '',
-                       value=safe_repr(v), shape=get_shape(v), dtype=get_dtype(v),
-                       is_container=(not gridable) and resolve_for(v) is not None,
-                       is_grid=gridable, path=path, accessor=accessor)
+                       value=value_str(v), shape=get_shape(v), dtype=get_dtype(v),
+                       is_container=resolve_for(v) is not None,   # gridables are also expandable
+                       is_grid=is_gridable(v), path=path, accessor=accessor)
     except Exception as e:
         return VarInfo(name=name, type='?', value=f'<error {e}>', is_error=True,
                        path=path, accessor=accessor)
