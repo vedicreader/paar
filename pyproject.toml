@@ -43,4 +43,6 @@ path = "paar/__init__.py"
 dev = [
     "fossick>=0.0.10",
     "koshas>=0.0.27",
+    "nbdev>=3.2.2",
+    "notebook>=7.6.0",
 ]
