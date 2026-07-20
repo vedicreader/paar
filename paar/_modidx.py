@@ -5,4 +5,7 @@ d = { 'settings': { 'branch': 'main',
                 'doc_host': 'https://vedicreader.github.io',
                 'git_url': 'https://github.com/vedicreader/paar',
                 'lib_path': 'paar'},
-  'syms': {'paar.core': {'paar.core.VarInfo': ('core.html#varinfo', 'paar/core.py')}}}
+  'syms': { 'paar.core': {'paar.core.VarInfo': ('core.html#varinfo', 'paar/core.py')},
+            'paar.reprs': { 'paar.reprs.get_dtype': ('reprs.html#get_dtype', 'paar/reprs.py'),
+                            'paar.reprs.get_shape': ('reprs.html#get_shape', 'paar/reprs.py'),
+                            'paar.reprs.safe_repr': ('reprs.html#safe_repr', 'paar/reprs.py')}}}
