@@ -1,7 +1,0 @@
-# Managed by gheasy — do not edit directly
-name: ' CI'
-on:
-  push:
-    branches:
-      - main
-jobs: {}
