@@ -15,7 +15,7 @@ from fasthtml.jupyter import JupyUvi, HTMX
 from .bridge import Bridge, on_change
 from .core import VarInfo
 
-_css = Style('.paar-children{margin-left:1rem} .paar-toggle{cursor:pointer;user-select:none}')
+_css = Style('.paar-children{margin-left:1rem} summary{cursor:pointer}')
 bridge = Bridge()
 app = FastHTML(exts='ws', hdrs=(_css,))   # ws ext + pico (default) + indentation css
 _clients = []   # list[(loop, send)]
@@ -33,15 +33,17 @@ def _acc(accessor):
     return quote(json.dumps(list(accessor)), safe='')
 
 def _node(v:VarInfo):
-    "Render one VarInfo as a tree node; containers get a ▸ toggle that lazily loads children."
+    "Render a tree node; containers use <details> for native collapse + htmx lazy-load-once."
     b = _badges(v)
     head = Span(Strong(v.name), ' ', Small(v.type, title=v.qualifier), ' ',
                 Code(v.value), (' ' + b) if b else '',
                 cls=('error' if v.is_error else None))
     if v.is_container:
-        toggle = Span('▸', cls='paar-toggle', hx_get=f'/expand?accessor={_acc(v.accessor)}',
-                      hx_target='next .paar-children', hx_swap='innerHTML')
-        return Div(Div(toggle, ' ', head), Div(cls='paar-children'), cls='paar-node')
+        return Details(
+            Summary(head, hx_get=f'/expand?accessor={_acc(v.accessor)}',
+                    hx_target='next .paar-children', hx_swap='innerHTML', hx_trigger='click once'),
+            Div(cls='paar-children'),
+            cls='paar-node')
     return Div(head, cls='paar-node')
 
 def _rows_div():

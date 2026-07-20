@@ -65,6 +65,18 @@ from paar.fasthtml import inspector
 inspector()          # panel renders inline; keep this cell's output visible
 ```
 
+<script>
+document.body.addEventListener('htmx:configRequest', (event) => {
+    if(event.detail.path.includes('://')) return;
+    htmx.config.selfRequestsOnly=false;
+    event.detail.path = `${location.protocol}//${location.hostname}:8000${event.detail.path}`;
+});
+</script>
+
+<a href="http://localhost:8000/" target="_blank">Open in new tab</a>
+
+<iframe src="http://localhost:8000/" style="width: 100%; height: 520px; border: none;" onload="" allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; display-capture; encrypted-media; fullscreen; gamepad; geolocation; gyroscope; hid; identity-credentials-get; idle-detection; magnetometer; microphone; midi; payment; picture-in-picture; publickey-credentials-get; screen-wake-lock; serial; usb; web-share; xr-spatial-tracking"></iframe> 
+
 ``` python
 import math
 data = {'a': 1, 'b': [1, 2, {'deep': [10, 20]}], 'c': 'hello', 'pi': math.pi}
