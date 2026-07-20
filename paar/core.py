@@ -20,6 +20,7 @@ class VarInfo:
     shape:str|None=None
     dtype:str|None=None
     is_container:bool=False
+    is_grid:bool=False
     is_error:bool=False
     path:str=''
     accessor:tuple=()
