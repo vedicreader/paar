@@ -78,8 +78,10 @@ document.body.addEventListener('htmx:configRequest', (event) => {
 <iframe src="http://localhost:8000/" style="width: 100%; height: 520px; border: none;" onload="" allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; display-capture; encrypted-media; fullscreen; gamepad; geolocation; gyroscope; hid; identity-credentials-get; idle-detection; magnetometer; microphone; midi; payment; picture-in-picture; publickey-credentials-get; screen-wake-lock; serial; usb; web-share; xr-spatial-tracking"></iframe> 
 
 ``` python
-import math
+import math, numpy as np, pandas as pd
 data = {'a': 1, 'b': [1, 2, {'deep': [10, 20]}], 'c': 'hello', 'pi': math.pi}
+arr = np.arange(12).reshape(3, 4)
+df = pd.DataFrame({'x': range(5), 'y': list('abcde')})
 ```
 
 ``` python
@@ -94,3 +96,7 @@ data['d'] = list(range(1000))   # run this; the panel above updates without re-r
 Click the ▸ toggle on any container row (dict / list / tuple / set / object) to load its
 children one level at a time. Nested containers keep their own toggles, so you can drill in
 as deep as the data goes — e.g. `data` → `'b'` → `[2]` → `'deep'`.
+
+`arr` (numpy) and `df` (pandas) show a **▦ grid** toggle instead of a tree — click it to open a
+scrollable, paged table (use the row/col ◀ ▶ controls for data larger than one page). Plain
+containers still expand as a tree.
