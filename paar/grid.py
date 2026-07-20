@@ -9,6 +9,7 @@ __all__ = ['is_gridable', 'array_page', 'array_detail', 'frame_detail', 'series_
            'SeriesResolver']
 
 # %% ../nbs/06_grid.ipynb #a0000020
+import itertools
 from .reprs import safe_repr
 from .resolvers import Resolver, register_resolver
 try: import numpy as np
@@ -57,17 +58,21 @@ def array_page(v, roff=0, coff=0, rows=50, cols=50):
             'rows': rows, 'cols': cols}
 
 # %% ../nbs/06_grid.ipynb #810a5530
+_MAX_ELEMS = 90   # element rows generated per expand (metadata rows add on top; keeps total under snapshot MAX_CHILDREN)
+
 def _stat(fn):
     "Call a numpy/pandas reduction, returning None if it raises (e.g. non-numeric data)."
     try: return fn()
     except Exception: return None
 
 def array_detail(v):
-    "Curated child rows for an ndarray: metadata, numeric stats, then indexed elements."
+    "Curated child rows for an ndarray: metadata, numeric stats, then indexed elements (capped)."
     rows = [('shape', '.shape', v.shape), ('dtype', '.dtype', v.dtype), ('size', '.size', v.size)]
     rows += [(nm, f'.{nm}()', s) for nm,fn in [('min',v.min),('max',v.max),('mean',v.mean),
                                                ('std',v.std),('sum',v.sum)] if (s:=_stat(fn)) is not None]
-    rows += [(str(i), f'[{i}]', x) for i,x in enumerate(v)]
+    rows += [(str(i), f'[{i}]', x) for i,x in itertools.islice(enumerate(v), _MAX_ELEMS)]
+    n = len(v)
+    if n > _MAX_ELEMS: rows.append(('…', '', f'{n-_MAX_ELEMS} more'))
     return rows
 
 def frame_detail(v):
@@ -76,9 +81,12 @@ def frame_detail(v):
             *[(str(c), f'[{c!r}]', v[c]) for c in v.columns]]
 
 def series_detail(v):
-    "Curated child rows for a Series: metadata then indexed elements."
-    return [('dtype', '.dtype', v.dtype), ('size', '.size', v.size), ('name', '.name', v.name),
-            *[(str(ix), f'.iloc[{i}]', x) for i,(ix,x) in enumerate(v.items())]]
+    "Curated child rows for a Series: metadata then indexed elements (capped)."
+    rows = [('dtype', '.dtype', v.dtype), ('size', '.size', v.size), ('name', '.name', v.name)]
+    rows += [(str(ix), f'.iloc[{i}]', x) for i,(ix,x) in itertools.islice(enumerate(v.items()), _MAX_ELEMS)]
+    n = len(v)
+    if n > _MAX_ELEMS: rows.append(('…', '', f'{n-_MAX_ELEMS} more'))
+    return rows
 
 class ArrayResolver(Resolver):
     "Expands an ndarray into stats + element rows (peers the grid table)."
