@@ -28,7 +28,7 @@ _css = Style(
     '.paar-page{margin-right:.5rem;cursor:pointer} '
     '.paar-grid-label{opacity:.6}')
 bridge = Bridge()
-app,rt = fast_app(exts='ws', hdrs=(_css,))
+app,rt = fast_app(exts='ws', hdrs=(_css,), htmlkw={'data-theme':'dark'})   # ws ext + pico dark theme (readable in dark IDEs)
 _clients = []   # list[(loop, send)]
 _clients_lock = threading.Lock()
 _server = None
