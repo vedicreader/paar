@@ -22,6 +22,7 @@ class VarInfo:
     is_container:bool=False
     is_error:bool=False
     path:str=''
+    accessor:tuple=()
 
 # %% auto #0
 __all__ = ['LAZY', 'VarInfo']

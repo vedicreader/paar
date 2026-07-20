@@ -65,9 +65,21 @@ from paar.fasthtml import inspector
 inspector()          # panel renders inline; keep this cell's output visible
 ```
 
+<script>
+document.body.addEventListener('htmx:configRequest', (event) => {
+    if(event.detail.path.includes('://')) return;
+    htmx.config.selfRequestsOnly=false;
+    event.detail.path = `${location.protocol}//${location.hostname}:8000${event.detail.path}`;
+});
+</script>
+
+<a href="http://localhost:8000/" target="_blank">Open in new tab</a>
+
+<iframe src="http://localhost:8000/" style="width: 100%; height: 520px; border: none;" onload="" allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; display-capture; encrypted-media; fullscreen; gamepad; geolocation; gyroscope; hid; identity-credentials-get; idle-detection; magnetometer; microphone; midi; payment; picture-in-picture; publickey-credentials-get; screen-wake-lock; serial; usb; web-share; xr-spatial-tracking"></iframe> 
+
 ``` python
 import math
-data = {'a': 1, 'b': [1,2,3], 'c': 'hello', 'pi': math.pi}
+data = {'a': 1, 'b': [1, 2, {'deep': [10, 20]}], 'c': 'hello', 'pi': math.pi}
 ```
 
 ``` python
@@ -78,3 +90,7 @@ data['d'] = list(range(1000))   # run this; the panel above updates without re-r
 - **Inline:** the [`inspector()`](https://vedicreader.github.io/paar/fasthtml.html#inspector) cell output above updates live after every cell — you do not re-run it.
 - **Docked side panel (JupyterLab):** right-click the [`inspector()`](https://vedicreader.github.io/paar/fasthtml.html#inspector) output → *Create New View for Cell Output* → drag into a split pane.
 - **Full window:** open <http://localhost:8000/> or click the *open in browser* link.
+
+Click the ▸ toggle on any container row (dict / list / tuple / set / object) to load its
+children one level at a time. Nested containers keep their own toggles, so you can drill in
+as deep as the data goes — e.g. `data` → `'b'` → `[2]` → `'deep'`.
