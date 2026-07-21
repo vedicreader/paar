@@ -48,8 +48,30 @@ function paarSyncTypes(){
   sel.value=cur; paarFilter();
 }
 htmx.onLoad(()=>{ if(window.paarSyncTypes) paarSyncTypes(); });
-"""))
+"""),
+    Script("""
+import {CodeJar} from 'https://cdn.jsdelivr.net/npm/codejar@4.2.0/dist/codejar.js';
+function paarInitEditor(){
+  const el=document.querySelector('#paar-code');
+  if(!el||el.dataset.cj) return;
+  el.dataset.cj='1';
+  const src=document.querySelector('#paar-code-src');
+  const hl=e=>{ e.innerHTML=hljs.highlight(e.textContent,{language:'python'}).value; };
+  const jar=CodeJar(el, hl, {tab:'    '});
+  jar.updateCode(src.value||'');
+  jar.onUpdate(code=>{ src.value=code; });
+  el.addEventListener('keydown', e=>{
+    if(e.key==='Enter' && e.shiftKey){ e.preventDefault(); e.stopImmediatePropagation();
+      htmx.trigger('#paar-exec-form','submit'); }
+  }, true);
+}
+if(document.readyState!=='loading') paarInitEditor();
+else document.addEventListener('DOMContentLoaded', paarInitEditor);
+""", type='module'))
 _css = Style(
+    ':root{--pico-primary:#0172ad;--pico-muted-border-color:#cfd6dd;--pico-background-color:#fff;--paar-fg:#1b1f24} '
+    '@media (prefers-color-scheme:dark){:root{--pico-primary:#5aa7e6;--pico-muted-border-color:#343b43;--pico-background-color:#0d1117;--paar-fg:#c9d1d9}} '
+    'body{color:var(--paar-fg);background:var(--pico-background-color);margin:0} '
     '.paar-node{font-size:.8rem;line-height:1.45;'
     'font-family:ui-monospace,SFMono-Regular,Menlo,monospace} '
     '.paar-children{margin-left:.55rem;padding-left:.4rem;'
@@ -67,7 +89,8 @@ _css = Style(
     'code.hljs{display:inline;background:none;padding:0} '
     '.paar-group>summary{font-weight:600;opacity:.65;text-transform:uppercase;'
     'font-size:.7rem;letter-spacing:.03em} '
-    '.paar-profile{font-size:.75rem;padding:.1rem .3rem;margin:0 0 .4rem;width:auto} '
+    '.paar-profile{font:inherit;font-size:.75rem;padding:.1rem .4rem;margin:0 0 .4rem;width:auto;'
+    'border:1px solid var(--pico-muted-border-color);border-radius:5px;background:var(--pico-background-color);color:inherit} '
     '.paar-gridbox:not(:empty){margin:.25rem 0 .25rem .85rem} '
     '.paar-grid{max-height:360px;overflow:auto} '
     '.paar-grid table{font-size:.8rem;margin:0} '
@@ -75,16 +98,28 @@ _css = Style(
     '.paar-gridnav{margin:.25rem 0} '
     '.paar-page{margin-right:.5rem;cursor:pointer} '
     '.paar-grid-label{opacity:.6;cursor:pointer} '
-    '.paar-exec{display:flex;gap:.4rem;align-items:center;margin:0 0 .4rem} '
-    '.paar-exec-input{flex:1;font-size:.8rem;padding:.15rem .3rem;margin:0} '
+    '.paar-exec{display:flex;flex-direction:column;gap:.35rem;margin:0 0 .5rem} '
+    '.paar-exec-controls{display:flex;gap:.5rem;align-items:center;justify-content:flex-end} '
+    '.paar-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;line-height:1.45;'
+    'min-height:2em;max-height:14em;overflow:auto;white-space:pre;tab-size:4;'
+    'border:1px solid var(--pico-muted-border-color);border-radius:6px;padding:.35rem .5rem;'
+    'background:var(--pico-background-color)} '
+    '.paar-code:focus{outline:none;border-color:var(--pico-primary)} '
+    '.paar-exec button{font:inherit;font-size:.8rem;padding:.2rem .8rem;border-radius:6px;cursor:pointer;'
+    'border:1px solid var(--pico-primary);background:var(--pico-primary);color:#fff} '
+    '.paar-exec button:hover{opacity:.9} '
+    '.paar-exec label{display:flex;align-items:center;gap:.3rem;font-size:.75rem} '
     '.paar-out{font-size:.75rem;white-space:pre-wrap;margin:.2rem 0} '
     '.paar-val{cursor:pointer;border-bottom:1px dotted var(--pico-muted-border-color)} '
-    '.paar-edit-input{font-size:.8rem;padding:.1rem .25rem;margin:0} '
-    '.paar-filter{display:flex;gap:.4rem;margin:0 0 .4rem} '
-    '.paar-filter-name{flex:1;font-size:.8rem;padding:.15rem .3rem;margin:0} '
-    '.paar-filter-type{font-size:.8rem;margin:0} ')
+    '.paar-edit-input{font:inherit;font-size:.8rem;padding:.15rem .4rem;margin:0;'
+    'border:1px solid var(--pico-muted-border-color);border-radius:5px;background:var(--pico-background-color);color:inherit} '
+    '.paar-filter{display:flex;gap:.4rem;align-items:center;margin:0 0 .4rem} '
+    '.paar-filter input,.paar-filter select{font:inherit;font-size:.8rem;padding:.15rem .4rem;margin:0;'
+    'border:1px solid var(--pico-muted-border-color);border-radius:5px;background:var(--pico-background-color);color:inherit} '
+    '.paar-filter-name{flex:1;min-width:0} '
+    '.paar-filter-type{width:auto} ')
 bridge = Bridge()
-app,rt = fast_app(exts='ws', hdrs=(_css, *_hljs))   # ws ext + hljs
+app,rt = fast_app(exts='ws', pico=False, hdrs=(_css, *_hljs))   # ws ext + hljs
 _clients = []   # list[(loop, send)]
 _clients_lock = threading.Lock()
 _server = None
@@ -202,11 +237,14 @@ def _loader(oob=False):
     return Div(id='rows', **kw)
 
 def _exec_bar():
-    "Input to run code in the kernel; Enter runs it, checkbox toggles isolated scope."
-    return Form(Input(name='code', placeholder='run code…', cls='paar-exec-input'),
-                Label(Input(type='checkbox', name='scope', value='isolated'), ' isolated'),
-                Button('run', type='submit'),
-                hx_post='/exec', hx_target='#exec-out', hx_swap='outerHTML', cls='paar-exec')
+    "Multi-line code editor (CodeJar + hljs); Shift+Enter runs, Enter=newline; isolated toggle."
+    return Form(
+        Div(id='paar-code', cls='paar-code hljs language-python'),
+        Textarea(name='code', id='paar-code-src', style='display:none'),
+        Div(Label(Input(type='checkbox', name='scope', value='isolated'), ' isolated'),
+            Button('run', type='submit'), cls='paar-exec-controls'),
+        hx_post='/exec', hx_target='#exec-out', hx_swap='outerHTML',
+        id='paar-exec-form', cls='paar-exec')
 
 def _exec_out(r):
     "Render an ExecResult as the #exec-out container: result row (if any) + stdout/error panels."
