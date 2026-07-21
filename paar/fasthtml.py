@@ -26,7 +26,29 @@ _hljs = (   # inline python syntax-highlighting; theme follows the OS/browser co
          href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/atom-one-light.min.css'),
     Script(src='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/highlight.min.js'),
     Script("htmx.onLoad(el=>el.querySelectorAll('code.pv:not([data-highlighted])')"
-           ".forEach(c=>hljs.highlightElement(c)))"))
+           ".forEach(c=>hljs.highlightElement(c)))"),
+    Script("""
+function paarFilter(){
+  const nq=(document.querySelector('.paar-filter-name')?.value||'').toLowerCase();
+  const tq=document.querySelector('.paar-filter-type')?.value||'';
+  document.querySelectorAll('#rows .paar-node[data-name]').forEach(n=>{
+    const nm=(n.getAttribute('data-name')||'').toLowerCase();
+    const ty=n.getAttribute('data-type')||'';
+    const show=(!nq||nm.includes(nq))&&(!tq||ty===tq);
+    n.style.display=show?'':'none';
+    if(show){const g=n.closest('details.paar-group'); if(g)g.open=true;}
+  });
+}
+function paarSyncTypes(){
+  const sel=document.querySelector('.paar-filter-type'); if(!sel)return;
+  const cur=sel.value;
+  const types=[...new Set([...document.querySelectorAll('#rows .paar-node[data-type]')]
+    .map(n=>n.getAttribute('data-type')).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">all types</option>'+types.map(t=>'<option value="'+t+'">'+t+'</option>').join('');
+  sel.value=cur; paarFilter();
+}
+htmx.onLoad(()=>{ if(window.paarSyncTypes) paarSyncTypes(); });
+"""))
 _css = Style(
     '.paar-node{font-size:.8rem;line-height:1.45;'
     'font-family:ui-monospace,SFMono-Regular,Menlo,monospace} '
@@ -57,7 +79,10 @@ _css = Style(
     '.paar-exec-input{flex:1;font-size:.8rem;padding:.15rem .3rem;margin:0} '
     '.paar-out{font-size:.75rem;white-space:pre-wrap;margin:.2rem 0} '
     '.paar-val{cursor:pointer;border-bottom:1px dotted var(--pico-muted-border-color)} '
-    '.paar-edit-input{font-size:.8rem;padding:.1rem .25rem;margin:0} ')
+    '.paar-edit-input{font-size:.8rem;padding:.1rem .25rem;margin:0} '
+    '.paar-filter{display:flex;gap:.4rem;margin:0 0 .4rem} '
+    '.paar-filter-name{flex:1;font-size:.8rem;padding:.15rem .3rem;margin:0} '
+    '.paar-filter-type{font-size:.8rem;margin:0} ')
 bridge = Bridge()
 app,rt = fast_app(exts='ws', hdrs=(_css, *_hljs))   # ws ext + hljs
 _clients = []   # list[(loop, send)]
@@ -103,20 +128,27 @@ def _node(v:VarInfo):
     "Render a tree node: the load-more sentinel fetches the next page; containers expand; gridables also get a collapsible grid; scalars are plain."
     if v.more_offset is not None: return _more(v)
     head = _head(v)
+    data = dict(data_name=v.name, data_type=v.type)
     if v.is_container:
         body = [_grid_toggle(v)] if v.is_grid else []   # grid toggle sits above the tree children
         return Details(
             Summary(head, hx_get=f'/expand?accessor={_acc(v.accessor)}',
                     hx_target='next .paar-children', hx_swap='innerHTML', hx_trigger='click once'),
             *body,
-            Div(cls='paar-children'), cls='paar-node')
+            Div(cls='paar-children'), cls='paar-node', **data)
     if v.is_grid:   # gridable but not otherwise expandable: the row itself toggles the grid
         return Details(
             Summary(head, ' ', Span('▦ grid', cls='paar-grid-label'),
                     hx_get=f'/grid?accessor={_acc(v.accessor)}&roff=0&coff=0',
                     hx_target='next .paar-gridbox', hx_swap='innerHTML', hx_trigger='click once'),
-            Div(cls='paar-gridbox'), cls='paar-node')
-    return Div(head, cls='paar-node paar-leaf')
+            Div(cls='paar-gridbox'), cls='paar-node', **data)
+    return Div(head, cls='paar-node paar-leaf', **data)
+
+def _filter_bar():
+    "Name substring input + type dropdown; both filter the tree client-side."
+    return Div(Input(name='fname', placeholder='filter name…', cls='paar-filter-name', oninput='paarFilter()'),
+               Select(Option('all types', value=''), name='ftype', cls='paar-filter-type', onchange='paarFilter()'),
+               cls='paar-filter')
 
 def _grid_nav(page, acc):
     "Prev/next paging controls + window info for a grid page."
@@ -187,7 +219,7 @@ def _exec_out(r):
 # %% ../nbs/05_fasthtml.ipynb #cell-export-routes
 @rt('/')
 def home():
-    return Titled('paar', _profile_select(), _exec_bar(), Div(id='exec-out'),
+    return Titled('paar', _profile_select(), _filter_bar(), _exec_bar(), Div(id='exec-out'),
                   Div(_loader(), hx_ext='ws', ws_connect='/live', id='paar'))
 
 @rt('/rows')
