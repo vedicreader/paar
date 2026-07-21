@@ -10,7 +10,7 @@ __all__ = ['bridge', 'app', 'rt', 'home', 'rows', 'expand_route', 'grid_route', 
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
 import asyncio, threading, json
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 from fasthtml.common import *
 from fasthtml.jupyter import JupyUvi, HTMX
 from .bridge import Bridge, on_change
@@ -220,7 +220,7 @@ def edit_route(accessor:str):
 @rt('/set')
 def set_route(accessor:str, expr:str):
     "Write `expr` into the namespace at `accessor`; refresh the tree, or surface an inline error."
-    err = bridge.set_value(tuple(json.loads(unquote(accessor))), expr)
+    err = bridge.set_value(tuple(json.loads(accessor)), expr)
     if err:
         return _rows_div(), Div(err, id='exec-out', cls='paar-out error', hx_swap_oob='true')
     _broadcast(to_xml(_loader(oob=True)))
