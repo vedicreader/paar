@@ -94,3 +94,8 @@ as deep as the data goes — e.g. `data` → `'b'` → `[2]` → `'deep'`.
 `arr` (numpy) and `df` (pandas) show a **▦ grid** toggle instead of a tree — click it to open a
 scrollable, paged table (use the row/col ◀ ▶ controls for data larger than one page). Plain
 containers still expand as a tree.
+
+**Exec, inline edit, and filtering:**
+- **Exec box:** type an expression or statement and press Run — executes in the kernel; tick *Isolated* to evaluate side-effect-free (result shown without writing back to the namespace).
+- **Inline edit:** click any scalar value in the tree to edit it in place; the new value is written back into the kernel namespace immediately.
+- **Filter bar:** narrow the variable list by name substring or type (use the name field and the type dropdown above the table).
