@@ -6,7 +6,7 @@ Docs: https://vedicreader.github.io/paar/fasthtml.html.md"""
 
 # %% auto #0
 __all__ = ['bridge', 'app', 'rt', 'home', 'rows', 'expand_route', 'grid_route', 'exec_route', 'complete_route', 'edit_route',
-           'set_route', 'live', 'inspector']
+           'set_route', 'sessions_route', 'session_route', 'live', 'inspector']
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
 import asyncio, threading, json
@@ -16,7 +16,7 @@ from fasthtml.jupyter import JupyUvi, HTMX
 from .bridge import Bridge, on_change
 from .core import VarInfo
 from .snapshot import PROFILES
-from .runtime import run, complete
+from .runtime import run, complete, list_sessions, read_session
 from starlette.responses import JSONResponse
 
 # %% ../nbs/05_fasthtml.ipynb #374fe0c4676e9b8
@@ -71,6 +71,7 @@ function paarInitEditor(){
   const hl=e=>{ e.innerHTML=hljs.highlight(e.textContent,{language:'python'}).value; };
   const jar=CodeJar(el, hl, {tab:'    '});
   jar.updateCode(src.value||''); jar.onUpdate(c=>{ src.value=c; });
+  window.paarLoad=c=>{ jar.updateCode(c); src.value=c; el.focus(); };
   form.addEventListener('htmx:afterRequest', e=>{ if(e.detail.successful){ jar.updateCode(''); src.value=''; } });
   // ---- autocomplete popup ----
   let items=[], sel=0, from=0, box=null;
@@ -79,7 +80,7 @@ function paarInitEditor(){
     if(!box){ box=document.createElement('div'); box.className='paar-ac'; document.body.appendChild(box); }
     box.innerHTML=items.map((m,i)=>'<div class="paar-ac-item'+(i===sel?' sel':'')+'">'+m+'</div>').join('');
     Array.from(box.children).forEach((c,i)=>c.onmousedown=ev=>{ ev.preventDefault(); accept(i); });
-    const rects=window.getSelection().getRangeAt(0).getClientRects();
+    const sr=window.getSelection(); const rects=sr.rangeCount?sr.getRangeAt(0).getClientRects():[];
     const rc=rects.length?rects[0]:el.getBoundingClientRect();
     box.style.left=rc.left+'px'; box.style.top=(rc.bottom+2)+'px';
   };
@@ -104,6 +105,8 @@ function paarInitEditor(){
     if(/^[\\w.]$/.test(e.key)){ clearTimeout(el._acT); el._acT=setTimeout(trigger,120); } else close();
   }, false);
   el.addEventListener('blur', ()=>setTimeout(close,150));
+  document.addEventListener('click', e=>{ const b=e.target.closest('.paar-reuse'); if(!b) return;
+    const cc=b.parentElement.querySelector('code'); if(cc&&window.paarLoad) window.paarLoad(cc.textContent); });
 }
 if(document.readyState!=='loading') paarInitEditor();
 else document.addEventListener('DOMContentLoaded', paarInitEditor);
@@ -162,7 +165,12 @@ _css = Style(
     'background:var(--pico-background-color);border:1px solid var(--pico-muted-border-color);'
     'border-radius:6px;font:.8rem ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 4px 14px rgba(0,0,0,.18)} '
     '.paar-ac-item{padding:.1rem .5rem;cursor:pointer;white-space:pre} '
-    '.paar-ac-item.sel{background:var(--pico-primary);color:#fff} ')
+    '.paar-ac-item.sel{background:var(--pico-primary);color:#fff} '
+    '.paar-session-cells{margin-left:.6rem} '
+    '.paar-session-cell{display:flex;gap:.4rem;align-items:flex-start;margin:.15rem 0} '
+    '.paar-session-cell code{white-space:pre-wrap;font-size:.78rem} '
+    '.paar-reuse{flex:0 0 auto;cursor:pointer;font-size:.75rem;padding:0 .35rem;border-radius:5px;'
+    'border:1px solid var(--pico-muted-border-color);background:var(--pico-background-color);color:inherit} ')
 bridge = Bridge()
 app,rt = fast_app(exts='ws', pico=False, hdrs=(_css, *_hljs))   # ws ext + hljs
 _clients = []   # list[(loop, send)]
@@ -303,7 +311,8 @@ def _exec_out(r):
 @rt('/')
 def home():
     return Titled('paar', _profile_select(), _filter_bar(), _exec_bar(), Div(id='exec-out'),
-                  Div(_loader(), hx_ext='ws', ws_connect='/live', id='paar'))
+                  Div(_loader(), hx_ext='ws', ws_connect='/live', id='paar'),
+                  _sessions_panel())
 
 @rt('/rows')
 def rows(profile:str=None):
@@ -344,6 +353,29 @@ def set_route(accessor:str, expr:str):
         return _rows_div(), Div(err, id='exec-out', cls='paar-out error', hx_swap_oob='true')
     _broadcast(to_xml(_loader(oob=True)))
     return _rows_div()
+
+def _session_rows():
+    ss = list_sessions()
+    if not ss: return [Div('no saved sessions', cls='paar-type')]
+    return [Details(Summary(f'{nm} · {n}', hx_get=f'/session?name={nm}',
+                            hx_target='next .paar-session-cells', hx_swap='innerHTML', hx_trigger='click once'),
+                    Div(cls='paar-session-cells'), cls='paar-node') for nm,n in ss]
+
+@rt('/sessions')
+def sessions_route(): return Div(*_session_rows())
+
+@rt('/session')
+def session_route(name:str=''):
+    cells = read_session(name)
+    if not cells: return Div('empty', cls='paar-type')
+    return Div(*[Div(Button('↺', cls='paar-reuse', title='load into editor'),
+                     Code(c, cls='pv language-python'), cls='paar-session-cell') for c in cells])
+
+def _sessions_panel():
+    "Bottom-of-inspector collapsible list of saved session notebooks (lazy-loaded on open)."
+    return Details(Summary('Sessions', hx_get='/sessions', hx_target='next .paar-children',
+                           hx_swap='innerHTML', hx_trigger='click once'),
+                   Div(cls='paar-children'), cls='paar-node paar-group', id='sessions')
 
 def _drop(send):
     "Remove a client by its send identity (thread-safe)."

@@ -72,6 +72,24 @@ def log_run(code):
         write_nb(nb, p)
     except Exception: pass
 
+def list_sessions():
+    "Saved session notebooks, newest first, as [(stem, n_code_cells)]."
+    if not SESSION_DIR.exists(): return []
+    out = []
+    for p in sorted(SESSION_DIR.glob('session_*.ipynb'), reverse=True):
+        try: n = sum(c.get('cell_type')=='code' for c in read_nb(p)['cells'])
+        except Exception: n = 0
+        out.append((p.stem, n))
+    return out
+
+def read_session(name):
+    "Code-cell sources for session `name` (a session_* stem); [] if missing or name is unsafe."
+    if '/' in name or chr(92) in name or not name.startswith('session_'): return []
+    p = SESSION_DIR/f'{name}.ipynb'
+    if not p.exists(): return []
+    try: return [c['source'] for c in read_nb(p)['cells'] if c.get('cell_type')=='code']
+    except Exception: return []
+
 def run(code, scope='global'):
     "Run `code` in the kernel; scope='global' mutates user_ns, 'isolated' uses a scratch copy."
     ip = get_ipython()
@@ -104,4 +122,4 @@ def set_value(accessor, expr):
         return f'{type(e).__name__}: {e}'
 
 # %% auto #0
-__all__ = ['SESSION_DIR', 'ExecResult', 'complete', 'log_run', 'run', 'set_value']
+__all__ = ['SESSION_DIR', 'ExecResult', 'complete', 'log_run', 'list_sessions', 'read_session', 'run', 'set_value']
