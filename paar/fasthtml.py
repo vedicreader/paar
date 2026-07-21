@@ -75,10 +75,11 @@ function paarInitEditor(){
   form.addEventListener('htmx:afterRequest', e=>{ if(e.detail.successful){ jar.updateCode(''); src.value=''; } });
   // ---- autocomplete popup ----
   let items=[], sel=0, from=0, box=null;
+  const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   const close=()=>{ if(box){box.remove(); box=null;} items=[]; };
   const render=()=>{
     if(!box){ box=document.createElement('div'); box.className='paar-ac'; document.body.appendChild(box); }
-    box.innerHTML=items.map((m,i)=>'<div class="paar-ac-item'+(i===sel?' sel':'')+'">'+m+'</div>').join('');
+    box.innerHTML=items.map((m,i)=>'<div class="paar-ac-item'+(i===sel?' sel':'')+'">'+esc(m)+'</div>').join('');
     Array.from(box.children).forEach((c,i)=>c.onmousedown=ev=>{ ev.preventDefault(); accept(i); });
     const sr=window.getSelection(); const rects=sr.rangeCount?sr.getRangeAt(0).getClientRects():[];
     const rc=rects.length?rects[0]:el.getBoundingClientRect();
@@ -88,7 +89,7 @@ function paarInitEditor(){
     const nc=code.slice(0,from)+m+code.slice(pos); jar.updateCode(nc); src.value=nc; paarSetCaret(el, from+m.length); close(); };
   const trigger=async()=>{ const code=src.value, pos=paarCaret(el);
     let res; try{ res=await fetch('/complete?code='+encodeURIComponent(code)+'&pos='+pos).then(r=>r.json()); }catch(e){ return; }
-    if(!res.matches||!res.matches.length){ close(); return; } items=res.matches.slice(0,50); sel=0; from=res['from']; render(); };
+    if(!res.matches||!res.matches.length){ close(); return; } items=res.matches; sel=0; from=res['from']; render(); };
   el.addEventListener('keydown', e=>{
     if(box){
       if(e.key==='ArrowDown'){e.preventDefault(); sel=(sel+1)%items.length; render(); return;}
