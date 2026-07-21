@@ -10,13 +10,14 @@ __all__ = ['bridge', 'app', 'rt', 'home', 'rows', 'expand_route', 'grid_route', 
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
 import asyncio, threading, json
+from pathlib import Path
 from urllib.parse import quote
 from fasthtml.common import *
 from fasthtml.jupyter import JupyUvi, HTMX
 from .bridge import Bridge, on_change
 from .core import VarInfo
 from .snapshot import PROFILES
-from .runtime import run, complete, list_sessions, read_session
+from .runtime import run, complete, list_sessions, read_session, current_session
 from starlette.responses import JSONResponse
 
 # %% ../nbs/05_fasthtml.ipynb #374fe0c4676e9b8
@@ -84,6 +85,7 @@ function paarInitEditor(){
     const sr=window.getSelection(); const rects=sr.rangeCount?sr.getRangeAt(0).getClientRects():[];
     const rc=rects.length?rects[0]:el.getBoundingClientRect();
     box.style.left=rc.left+'px'; box.style.top=(rc.bottom+2)+'px';
+    const selEl=box.children[sel]; if(selEl) selEl.scrollIntoView({block:'nearest'});
   };
   const accept=i=>{ const m=items[i]; if(m==null) return; const code=src.value, pos=paarCaret(el);
     const nc=code.slice(0,from)+m+code.slice(pos); jar.updateCode(nc); src.value=nc; paarSetCaret(el, from+m.length); close(); };
@@ -92,8 +94,8 @@ function paarInitEditor(){
     if(!res.matches||!res.matches.length){ close(); return; } items=res.matches; sel=0; from=res['from']; render(); };
   el.addEventListener('keydown', e=>{
     if(box){
-      if(e.key==='ArrowDown'){e.preventDefault(); sel=(sel+1)%items.length; render(); return;}
-      if(e.key==='ArrowUp'){e.preventDefault(); sel=(sel-1+items.length)%items.length; render(); return;}
+      if(e.key==='ArrowDown'){e.preventDefault(); e.stopImmediatePropagation(); sel=(sel+1)%items.length; render(); return;}
+      if(e.key==='ArrowUp'){e.preventDefault(); e.stopImmediatePropagation(); sel=(sel-1+items.length)%items.length; render(); return;}
       if(e.key==='Enter'||e.key==='Tab'){e.preventDefault(); e.stopImmediatePropagation(); accept(sel); return;}
       if(e.key==='Escape'){e.preventDefault(); close(); return;}
     }
@@ -355,12 +357,17 @@ def set_route(accessor:str, expr:str):
     _broadcast(to_xml(_loader(oob=True)))
     return _rows_div()
 
+def _session_row(stem, label, n, once=True):
+    return Details(Summary(f'{label} · {n}', hx_get=f'/session?name={stem}',
+                           hx_target='next .paar-session-cells', hx_swap='innerHTML',
+                           hx_trigger='click once' if once else 'click'),
+                   Div(cls='paar-session-cells'), cls='paar-node')
+
 def _session_rows():
-    ss = list_sessions()
-    if not ss: return [Div('no saved sessions', cls='paar-type')]
-    return [Details(Summary(f'{nm} · {n}', hx_get=f'/session?name={nm}',
-                            hx_target='next .paar-session-cells', hx_swap='innerHTML', hx_trigger='click once'),
-                    Div(cls='paar-session-cells'), cls='paar-node') for nm,n in ss]
+    cur = current_session(); counts = dict(list_sessions())
+    rows = [_session_row(cur, f'current · {Path.cwd().name}', counts.get(cur, 0), once=False)]
+    rows += [_session_row(s, s, n) for s,n in list_sessions() if s != cur]
+    return rows
 
 @rt('/sessions')
 def sessions_route(): return Div(*_session_rows())
@@ -373,9 +380,9 @@ def session_route(name:str=''):
                      Code(c, cls='pv language-python'), cls='paar-session-cell') for c in cells])
 
 def _sessions_panel():
-    "Bottom-of-inspector collapsible list of saved session notebooks (lazy-loaded on open)."
+    "Bottom-of-inspector list of session notebooks; refreshes on open; current session first."
     return Details(Summary('Sessions', hx_get='/sessions', hx_target='next .paar-children',
-                           hx_swap='innerHTML', hx_trigger='click once'),
+                           hx_swap='innerHTML', hx_trigger='click'),
                    Div(cls='paar-children'), cls='paar-node paar-group', id='sessions')
 
 def _drop(send):

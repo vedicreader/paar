@@ -7,7 +7,7 @@ Docs: https://vedicreader.github.io/paar/runtime.html.md"""
 # %% ../nbs/08_runtime.ipynb #68946c6e
 from __future__ import annotations
 from dataclasses import dataclass
-import ast, datetime
+import ast, datetime, re
 from pathlib import Path
 from .core import VarInfo
 from .snapshot import _var_info, _walk
@@ -48,11 +48,11 @@ def _flat_result(val):
     return VarInfo(name='result', type=type(val).__name__, value=value_str(val))
 
 def complete(code, pos):
-    "IPython completions at absolute offset `pos` in `code` -> {'from': int, 'matches': [str]}."
+    "IPython completions for the identifier ending at offset `pos` in `code` -> {'from': int, 'matches': [str]}."
     ip = get_ipython()
     if ip is None: return {'from': pos, 'matches': []}
-    line = code[:pos].rsplit('\n', 1)[-1]
-    try: pre, matches = ip.complete(None, line, len(line))
+    token = re.search(r'[\w.]*$', code[:pos]).group(0)
+    try: pre, matches = ip.complete(token)
     except Exception: return {'from': pos, 'matches': []}
     return {'from': pos - len(pre), 'matches': list(matches)[:50]}
 
@@ -62,6 +62,8 @@ _SESSION = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 def _session_path():
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
     return SESSION_DIR/f'session_{_SESSION}.ipynb'
+
+def current_session(): return f'session_{_SESSION}'
 
 def log_run(code):
     "Append `code` as a code cell to this session's notebook (best-effort; never raises)."
@@ -122,4 +124,5 @@ def set_value(accessor, expr):
         return f'{type(e).__name__}: {e}'
 
 # %% auto #0
-__all__ = ['SESSION_DIR', 'ExecResult', 'complete', 'log_run', 'list_sessions', 'read_session', 'run', 'set_value']
+__all__ = ['SESSION_DIR', 'ExecResult', 'complete', 'current_session', 'log_run', 'list_sessions', 'read_session', 'run',
+           'set_value']
