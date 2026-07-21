@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import ast
 from .core import VarInfo
-from .snapshot import _var_info
+from .snapshot import _var_info, _walk
 from .providers import value_str
 from IPython.utils.capture import capture_output
 try: from IPython import get_ipython
@@ -63,5 +63,17 @@ def run(code, scope='global'):
     result = _var_info('result', res.result, ('_',), '_') if res.result is not None else None
     return ExecResult(ok=bool(res.success) and err is None, result=result, stdout=cap.stdout, error=err)
 
+def set_value(accessor, expr):
+    "Assign `expr` (evaluated in user_ns) to the lvalue at `accessor`; return error text or None."
+    ip = get_ipython()
+    if ip is None: return 'no IPython kernel'
+    try: _, path = _walk(ip.user_ns, tuple(accessor))
+    except Exception as e: return f'bad accessor: {e}'
+    try:
+        exec(f'{path} = ({expr})', ip.user_ns)
+        return None
+    except Exception as e:
+        return f'{type(e).__name__}: {e}'
+
 # %% auto #0
-__all__ = ['ExecResult', 'run']
+__all__ = ['ExecResult', 'run', 'set_value']
