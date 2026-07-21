@@ -23,9 +23,9 @@ from starlette.responses import JSONResponse
 # %% ../nbs/05_fasthtml.ipynb #374fe0c4676e9b8
 _hljs = (   # inline python syntax-highlighting; theme follows the OS/browser color scheme
     Link(rel='stylesheet', media='(prefers-color-scheme: dark)',
-         href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/atom-one-dark.min.css'),
+         href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/github-dark.min.css'),
     Link(rel='stylesheet', media='(prefers-color-scheme: light)',
-         href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/atom-one-light.min.css'),
+         href='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/styles/github.min.css'),
     Script(src='https://cdn.jsdelivr.net/gh/highlightjs/cdn-release/build/highlight.min.js'),
     Script("htmx.onLoad(el=>el.querySelectorAll('code.pv:not([data-highlighted])')"
            ".forEach(c=>hljs.highlightElement(c)))"),
@@ -117,7 +117,7 @@ else document.addEventListener('DOMContentLoaded', paarInitEditor);
 _css = Style(
     ':root{--pico-primary:#0172ad;--pico-muted-border-color:#cfd6dd;--pico-background-color:#fff;--paar-fg:#1b1f24} '
     '@media (prefers-color-scheme:dark){:root{--pico-primary:#5aa7e6;--pico-muted-border-color:#343b43;--pico-background-color:#0d1117;--paar-fg:#c9d1d9}} '
-    'body{color:var(--paar-fg);background:var(--pico-background-color);margin:0} '
+    'body{color:var(--paar-fg);background:var(--pico-background-color);margin:0;padding:.75rem 1rem} '
     '.paar-node{font-size:.8rem;line-height:1.45;'
     'font-family:ui-monospace,SFMono-Regular,Menlo,monospace} '
     '.paar-children{margin-left:.55rem;padding-left:.4rem;'
@@ -313,7 +313,8 @@ def _exec_out(r):
 # %% ../nbs/05_fasthtml.ipynb #cell-export-routes
 @rt('/')
 def home():
-    return Titled('paar', _profile_select(), _filter_bar(), _exec_bar(), Div(id='exec-out'),
+    return Titled('paar', _profile_select(), _exec_bar(), Div(id='exec-out'),
+                  _filter_bar(),   # filter sits just above the vars, closer to what it filters
                   Div(_loader(), hx_ext='ws', ws_connect='/live', id='paar'),
                   _sessions_panel())
 

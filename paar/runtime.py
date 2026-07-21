@@ -48,12 +48,20 @@ def _flat_result(val):
     return VarInfo(name='result', type=type(val).__name__, value=value_str(val))
 
 def complete(code, pos):
-    "IPython completions for the identifier ending at offset `pos` in `code` -> {'from': int, 'matches': [str]}."
+    "IPython completions for the token ending at offset `pos`; full-line context enables `import`/module completion -> {'from': int, 'matches': [str]}."
     ip = get_ipython()
     if ip is None: return {'from': pos, 'matches': []}
+    bol = code.rfind('\n', 0, pos) + 1                     # current physical line + cursor within it:
+    eol = code.find('\n', pos); eol = len(code) if eol < 0 else eol   # gives IPython the `import ...`
+    line, cur = code[bol:eol], pos - bol                   # context so venv modules complete too
     token = re.search(r'[\w.]*$', code[:pos]).group(0)
-    try: pre, matches = ip.complete(token)
+    cmp = getattr(ip, 'Completer', None)   # real kernel: legacy ip.complete() returns nothing while Jedi is on
+    old = getattr(cmp, 'use_jedi', None)
+    if cmp is not None: cmp.use_jedi = False
+    try: pre, matches = ip.complete(token, line, cur)
     except Exception: return {'from': pos, 'matches': []}
+    finally:
+        if old is not None: cmp.use_jedi = old   # restore so the user's own tab-completion keeps Jedi
     return {'from': pos - len(pre), 'matches': list(matches)[:50]}
 
 SESSION_DIR = Path('paar_sessions')
