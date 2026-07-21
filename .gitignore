@@ -154,3 +154,6 @@ checklink/cookies.txt
 # FastHTML session key files
 .sesskey
 nbs/.sesskey
+
+# paar session notebooks
+paar_sessions/

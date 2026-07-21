@@ -7,11 +7,13 @@ Docs: https://vedicreader.github.io/paar/runtime.html.md"""
 # %% ../nbs/08_runtime.ipynb #68946c6e
 from __future__ import annotations
 from dataclasses import dataclass
-import ast
+import ast, datetime
+from pathlib import Path
 from .core import VarInfo
 from .snapshot import _var_info, _walk
 from .providers import value_str
 from IPython.utils.capture import capture_output
+from fastcore.nbio import read_nb, write_nb, new_nb, mk_cell
 try: from IPython import get_ipython
 except Exception:
     def get_ipython(): return None
@@ -45,6 +47,31 @@ def _flat_result(val):
     "A non-expandable result row (isolated mode leaves nothing reachable in user_ns)."
     return VarInfo(name='result', type=type(val).__name__, value=value_str(val))
 
+def complete(code, pos):
+    "IPython completions at absolute offset `pos` in `code` -> {'from': int, 'matches': [str]}."
+    ip = get_ipython()
+    if ip is None: return {'from': pos, 'matches': []}
+    line = code[:pos].rsplit('\n', 1)[-1]
+    try: pre, matches = ip.complete(None, line, len(line))
+    except Exception: return {'from': pos, 'matches': []}
+    return {'from': pos - len(pre), 'matches': list(matches)[:50]}
+
+SESSION_DIR = Path('paar_sessions')
+_SESSION = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+
+def _session_path():
+    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    return SESSION_DIR/f'session_{_SESSION}.ipynb'
+
+def log_run(code):
+    "Append `code` as a code cell to this session's notebook (best-effort; never raises)."
+    try:
+        p = _session_path()
+        nb = read_nb(p) if p.exists() else new_nb([])
+        nb['cells'].append(mk_cell(code))
+        write_nb(nb, p)
+    except Exception: pass
+
 def run(code, scope='global'):
     "Run `code` in the kernel; scope='global' mutates user_ns, 'isolated' uses a scratch copy."
     ip = get_ipython()
@@ -57,6 +84,7 @@ def run(code, scope='global'):
             return ExecResult(ok=True, result=None if val is None else _flat_result(val), stdout=cap.stdout)
         except Exception as e:
             return ExecResult(ok=False, error=f'{type(e).__name__}: {e}')
+    log_run(code)
     with capture_output() as cap:
         res = ip.run_cell(code, store_history=True)
     err = _fmt_err(res)
@@ -76,4 +104,4 @@ def set_value(accessor, expr):
         return f'{type(e).__name__}: {e}'
 
 # %% auto #0
-__all__ = ['ExecResult', 'run', 'set_value']
+__all__ = ['SESSION_DIR', 'ExecResult', 'complete', 'log_run', 'run', 'set_value']
