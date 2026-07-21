@@ -21,6 +21,7 @@ dependencies = [
     "litesearch>=0.0.34",
     "numpy>=2.2.6",
     "pandas>=2.3.3",
+    "prompt-toolkit>=3.0.0",
     "python-fasthtml>=0.14.9",
 ]
 
