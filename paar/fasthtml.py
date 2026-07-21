@@ -99,7 +99,7 @@ def _head(v:VarInfo):
     "PyCharm-style row: name = {type: shape} value; value is click-to-edit when it has an accessor."
     typ = f'{v.type}: {v.shape}' if v.shape else v.type
     val = Code(v.value, cls='pv language-python')
-    if v.accessor and v.more_offset is None and not v.is_error:
+    if v.accessor and v.accessor != ('_',) and v.more_offset is None and not v.is_error:
         val = Span(val, cls='paar-val', title='click to edit',
                    hx_post=f'/edit?accessor={_acc(v.accessor)}',
                    hx_target='this', hx_swap='innerHTML', hx_trigger='click')
