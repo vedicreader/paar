@@ -9,6 +9,7 @@ __all__ = ['Bridge', 'on_change']
 
 # %% ../nbs/04_bridge.ipynb #a0000020
 from .snapshot import snapshot, expand, grid_page, profile_view
+from .runtime import set_value
 try: from IPython import get_ipython
 except Exception:
     def get_ipython(): return None
@@ -22,10 +23,11 @@ def _hidden():
 
 class Bridge:
     "Frontend-agnostic access to the live kernel namespace."
-    def snapshot(self): return snapshot(_ns(), _hidden())
+    def snapshot(self, name=None, typ=None): return snapshot(_ns(), _hidden(), name, typ)
     def view(self, profile='standard'): return profile_view(_ns(), _hidden(), profile)
     def expand(self, accessor, offset=0): return expand(_ns(), accessor, offset)
     def grid(self, accessor, roff=0, coff=0, rows=50, cols=50): return grid_page(_ns(), accessor, roff, coff, rows, cols)
+    def set_value(self, accessor, expr): return set_value(accessor, expr)
 
 def on_change(cb):
     "Register cb() to fire after each cell execution; returns False outside IPython."
