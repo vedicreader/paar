@@ -7,6 +7,7 @@ Docs: https://vedicreader.github.io/paar/runtime.html.md"""
 # %% ../nbs/08_runtime.ipynb #68946c6e
 from __future__ import annotations
 from dataclasses import dataclass
+import ast
 from .core import VarInfo
 from .snapshot import _var_info
 from .providers import value_str
@@ -28,10 +29,34 @@ def _fmt_err(res):
     e = getattr(res, 'error_in_exec', None) or getattr(res, 'error_before_exec', None)
     return f'{type(e).__name__}: {e}' if e is not None else None
 
+def _exec_capture(code, ns):
+    "Exec statements in ns; return the value of a trailing expression, else None."
+    block = ast.parse(code)
+    value = None
+    if block.body and isinstance(block.body[-1], ast.Expr):
+        last = ast.Expression(block.body.pop().value)
+        exec(compile(block, '<paar>', 'exec'), ns)
+        value = eval(compile(last, '<paar>', 'eval'), ns)
+    else:
+        exec(compile(block, '<paar>', 'exec'), ns)
+    return value
+
+def _flat_result(val):
+    "A non-expandable result row (isolated mode leaves nothing reachable in user_ns)."
+    return VarInfo(name='result', type=type(val).__name__, value=value_str(val))
+
 def run(code, scope='global'):
     "Run `code` in the kernel; scope='global' mutates user_ns, 'isolated' uses a scratch copy."
     ip = get_ipython()
     if ip is None: return ExecResult(ok=False, error='no IPython kernel')
+    if scope == 'isolated':
+        ns = dict(ip.user_ns)
+        try:
+            with capture_output() as cap:
+                val = _exec_capture(code, ns)
+            return ExecResult(ok=True, result=None if val is None else _flat_result(val), stdout=cap.stdout)
+        except Exception as e:
+            return ExecResult(ok=False, error=f'{type(e).__name__}: {e}')
     with capture_output() as cap:
         res = ip.run_cell(code, store_history=True)
     err = _fmt_err(res)
