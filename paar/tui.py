@@ -52,6 +52,10 @@ class Client:
         "Live paar environments known to the connected server (the /api/envs discovery feed)."
         r = await self._http.get('/api/envs'); r.raise_for_status()
         return r.json().get('envs', [])
+    async def exec_code(self, code, scope='global'):
+        "Run code on the server; returns {ok, result, stdout, error} (see /api/exec)."
+        r = await self._http.get('/api/exec', params={'code': code, 'scope': scope})
+        r.raise_for_status(); return r.json()
     async def aclose(self): await self._http.aclose()
 
 # %% ../nbs/08_tui.ipynb #08-c4
@@ -99,7 +103,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Tree, DataTable, Static, Footer, OptionList
+from textual.widgets import Tree, DataTable, Static, Footer, OptionList, Input
 from textual.widgets.option_list import Option
 
 _PAGE = 50   # grid page window (rows/cols) per step
@@ -117,17 +121,20 @@ class EnvScreen(ModalScreen):
     def __init__(self, envs, current=None):
         super().__init__(); self.envs = envs; self.current = current
     def compose(self):
-        opts = [Option(f"{'\u25cf' if e['base']==self.current else ' '} {e['name']}   {e['base']}", id=e['base'])
+        dot = '●'
+        opts = [Option((dot if e['base']==self.current else ' ') + f"  {e['name']}   {e['base']}", id=e['base'])
                 for e in self.envs]
         yield Vertical(Static('switch environment', id='envtitle'), OptionList(*opts, id='envlist'), id='envbox')
     def on_option_list_option_selected(self, event): self.dismiss(event.option.id)
     def action_dismiss_none(self): self.dismiss(None)
 
 class InspectorApp(App):
-    "Live terminal inspector: a lazy gruvbox tree of the kernel namespace with a paged grid panel, refreshed on every cell run."
+    "Live terminal inspector: a lazy gruvbox tree of the kernel namespace with a filter, code-exec bar, and paged grid, refreshed on every cell run."
     CSS = """
     Screen { background: $background; }
     #topbar { height: 1; background: $panel; color: $foreground; padding: 0 1; }
+    #filter { height: 1; border: none; padding: 0 1; background: $surface; color: $foreground; }
+    #filter:focus { background: $panel; }
     #tree { padding: 0 0 0 1; background: $background; scrollbar-size-vertical: 1; }
     #tree > .tree--guides          { color: $surface; }
     #tree > .tree--guides-hover    { color: $panel; }
@@ -136,14 +143,21 @@ class InspectorApp(App):
     #gridwrap.visible { display: block; }
     #gridnav { height: 1; background: $panel; color: $foreground; padding: 0 1; }
     #grid { background: $background; scrollbar-size: 1 1; }
+    #execwrap { display: none; height: auto; max-height: 45%; }
+    #execwrap.visible { display: block; }
+    #execout { height: auto; max-height: 10; background: $background; color: $foreground; padding: 0 1; }
+    #code { border: none; background: $surface; color: $foreground; }
+    #code:focus { background: $panel; }
     Footer { background: $panel; }
     Footer > .footer-key--description { color: $foreground; }
     """
     BINDINGS = [
         Binding('r', 'refresh', 'refresh'),
+        Binding('slash', 'focus_filter', 'filter'),
+        Binding('x', 'toggle_exec', 'exec'),
         Binding('g', 'toggle_grid', 'grid'),
         Binding('e', 'switch_env', 'env'),
-        Binding('escape', 'hide_grid', 'close', show=False),
+        Binding('escape', 'hide_panels', 'close', show=False),
         Binding('1', "profile('minimal')", 'min'),
         Binding('2', "profile('standard')", 'std'),
         Binding('3', "profile('full')", 'full'),
@@ -161,6 +175,8 @@ class InspectorApp(App):
         self.env = None        # current env label (from /api/envs)
         self.profile = profile
         self.connect_ws = connect_ws
+        self.filter = ''       # case-insensitive name filter
+        self._data = None      # last /api/rows payload, for re-filtering without a refetch
         self._by_acc = {}      # tuple(accessor) -> TreeNode  (data nodes only)
         self._loaded = set()   # accessors whose children have been fetched
         self._live = False
@@ -169,6 +185,7 @@ class InspectorApp(App):
     # -- layout ---------------------------------------------------------------
     def compose(self) -> ComposeResult:
         yield Static(id='topbar')
+        yield Input(placeholder='filter by name…  ( / )', id='filter')
         self._tree = Tree('paar', id='tree')
         self._tree.show_root = False
         self._tree.guide_depth = 2
@@ -176,11 +193,15 @@ class InspectorApp(App):
         with Vertical(id='gridwrap'):
             yield Static(id='gridnav')
             yield DataTable(id='grid', zebra_stripes=True, cursor_type='row', show_row_labels=True)
+        with Vertical(id='execwrap'):
+            yield Static(id='execout')
+            yield Input(placeholder='python — Enter runs it   ( x toggles, esc closes )', id='code')
         yield Footer()
 
     async def on_mount(self):
         self.register_theme(gruvbox_theme()); self.theme = 'paar-gruvbox'
         await self._reload()
+        self._tree.focus()
         if self.connect_ws: self.run_worker(self._ws_loop(), name='ws', exclusive=True)
 
     # -- tree building --------------------------------------------------------
@@ -195,18 +216,24 @@ class InspectorApp(App):
 
     def _add_grid_child(self, parent, v):
         "A leaf '▦ grid' child under a gridable container — selecting it opens the grid (mirrors the web grid toggle)."
-        parent.add(Text('\u25a6 grid', style=GRUV['orange']),
+        parent.add(Text('▦ grid', style=GRUV['orange']),
                    data={'kind': 'grid', 'v': v, 'acc': tuple(v['accessor'])}, allow_expand=False)
+
+    def _match(self, v):
+        "Case-insensitive name filter (mirrors the web filter bar)."
+        return (not self.filter) or self.filter in (v.get('name','') or '').lower()
 
     def _build(self, data):
         self._tree.clear(); self._by_acc.clear(); self._loaded.clear()
         root = self._tree.root
         for grp in data['groups']:
+            nodes = [v for v in grp['nodes'] if self._match(v)]
+            if self.filter and not nodes: continue          # drop groups with no match
             if grp['label'] is None:
-                for v in grp['nodes']: self._add_node(root, v)
+                for v in nodes: self._add_node(root, v)
             else:
                 gnode = root.add(group_label(grp['label']), data={'kind': 'group'})
-                for v in grp['nodes']: self._add_node(gnode, v)
+                for v in nodes: self._add_node(gnode, v)
                 gnode.expand()
 
     async def _load(self, node, offset=0):
@@ -230,6 +257,7 @@ class InspectorApp(App):
         expanded = sorted((acc for acc, n in self._by_acc.items() if n.is_expanded), key=len)
         cursor = self._cursor_acc()
         self.profile = data.get('profile', self.profile)
+        self._data = data
         self._build(data)
         for acc in expanded:                      # replay drill-down, shallow first
             node = self._by_acc.get(acc)
@@ -256,7 +284,7 @@ class InspectorApp(App):
         elif d.get('kind') == 'grid':
             await self._open_grid(d['v'])
         elif d.get('kind') == 'node' and d['v'].get('is_grid') and not d['v'].get('is_container'):
-            await self._open_grid(d['v'])   # pure gridable: the row itself opens the grid (containers use the ▦ child)
+            await self._open_grid(d['v'])   # pure gridable: the row itself opens the grid (containers use the grid child)
 
     # -- grid panel -----------------------------------------------------------
     async def _open_grid(self, v):
@@ -275,8 +303,8 @@ class InspectorApp(App):
         for ix, row in zip(page['index'], page['cells']):
             dt.add_row(*[str(c) for c in row], label=str(ix))
         npr, npc = len(page['index']), len(page['headers'])
-        nav.update(f"[b {GRUV['orange']}]\u25a6[/]  rows {roff}\u2013{roff+npr}/{page['nrows']}   "
-                   f"cols {coff}\u2013{coff+npc}/{page['ncols']}   "
+        nav.update(f"[b {GRUV['orange']}]▦[/]  rows {roff}–{roff+npr}/{page['nrows']}   "
+                   f"cols {coff}–{coff+npc}/{page['ncols']}   "
                    f"[dim][ ] rows   {{ }} cols   esc close[/]")
 
     async def action_grid_page(self, axis, direction):
@@ -294,13 +322,53 @@ class InspectorApp(App):
         if d.get('kind') == 'grid': await self._open_grid(d['v'])
         elif d.get('v', {}).get('is_grid'): await self._open_grid(d['v'])
 
-    def action_hide_grid(self):
+    def action_hide_panels(self):
+        "esc: close the exec bar, else the grid panel."
+        ew = self.query_one('#execwrap')
+        if ew.has_class('visible'): ew.remove_class('visible'); self._tree.focus(); return
         self.query_one('#gridwrap').remove_class('visible')
 
     async def action_profile(self, name):
         self.profile = name; await self._reload()
 
     async def action_refresh(self): await self._reload()
+
+    # -- filter + exec --------------------------------------------------------
+    def action_focus_filter(self):
+        self.query_one('#filter', Input).focus()
+
+    def _rebuild_filtered(self):
+        if self._data is not None: self._build(self._data)
+
+    async def on_input_changed(self, event):
+        if event.input.id == 'filter':
+            self.filter = (event.value or '').strip().lower(); self._rebuild_filtered()
+
+    async def on_input_submitted(self, event):
+        if event.input.id == 'filter':
+            self._tree.focus()
+        elif event.input.id == 'code':
+            code = event.value
+            if not code.strip(): return
+            try: r = await self.client.exec_code(code)
+            except Exception as e:
+                self.query_one('#execout', Static).update(f"[{GRUV['red']}]{e}[/]"); return
+            self._show_exec(r); event.input.value = ''
+            await self._reload()
+
+    def _show_exec(self, r):
+        "Render an /api/exec result dict into the exec output pane."
+        g = GRUV; out = []
+        res = r.get('result')
+        if res: out.append(f"[{g['aqua']}]{res.get('value','')}[/]")
+        if r.get('stdout'): out.append(r['stdout'].rstrip())
+        if r.get('error'):  out.append(f"[{g['red']}]{r['error']}[/]")
+        self.query_one('#execout', Static).update('\n'.join(out) or f"[{g['gray']}]ok[/]")
+
+    async def action_toggle_exec(self):
+        w = self.query_one('#execwrap')
+        if w.has_class('visible'): w.remove_class('visible'); self._tree.focus()
+        else: w.add_class('visible'); self.query_one('#code', Input).focus()
 
     # -- env switching --------------------------------------------------------
     async def action_switch_env(self):
@@ -344,13 +412,13 @@ class InspectorApp(App):
         except Exception: return
         g = GRUV
         if err:
-            state = f"[{g['red']}]\u25cb[/] {err[:40]}"
+            state = f"[{g['red']}]○[/] {err[:40]}"
         else:
-            state = (f"[{g['green']}]\u25cf[/] live" if self._live
-                     else f"[{g['yellow']}]\u25cb[/] connecting\u2026")
-        env = f"  \u00b7  [{g['purple']}]{self.env}[/]" if self.env else ''
-        bar.update(f" [b {g['aqua']}]paar[/]{env}  \u00b7  [{g['fg4']}]{self.profile}[/]  \u00b7  {state}"
-                   f"    [dim]1/2/3 profile   g grid   e env   r refresh   q quit[/]")
+            state = (f"[{g['green']}]●[/] live" if self._live
+                     else f"[{g['yellow']}]○[/] connecting…")
+        env = f"  ·  [{g['purple']}]{self.env}[/]" if self.env else ''
+        bar.update(f" [b {g['aqua']}]paar[/]{env}  ·  [{g['fg4']}]{self.profile}[/]  ·  {state}"
+                   f"    [dim]/ filter   x exec   g grid   e env   r refresh   q quit[/]")
 
 # %% ../nbs/08_tui.ipynb #08-c7
 def _resolve(url=None, env=None):

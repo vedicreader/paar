@@ -7,7 +7,7 @@ Docs: https://vedicreader.github.io/paar/fasthtml.html.md"""
 # %% auto #0
 __all__ = ['bridge', 'app', 'rt', 'home', 'rows', 'expand_route', 'grid_route', 'exec_route', 'complete_route', 'edit_route',
            'set_route', 'sessions_route', 'session_route', 'live', 'api_rows', 'api_expand', 'api_grid', 'api_envs',
-           'inspector', 'serve', 'serve_main']
+           'api_exec', 'inspector', 'serve', 'serve_main']
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
 import asyncio, threading, json, sys, time, atexit, argparse
@@ -442,6 +442,13 @@ def api_grid(accessor:str, roff:int=0, coff:int=0):
 def api_envs():
     "This server's env label + all live paar environments — the discovery feed for the frontend env picker."
     return JSONResponse({'env':_env, 'envs':R.active()})
+
+@rt('/api/exec')
+def api_exec(code:str, scope:str='global'):
+    "Run code in the server's namespace; return {ok, result, stdout, error} as JSON (the terminal exec bar consumes this)."
+    r = run(code, scope if scope in ('global','isolated') else 'global')
+    return JSONResponse({'ok': r.ok, 'stdout': r.stdout, 'error': r.error,
+                         'result': _vd(r.result) if r.result is not None else None})
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-broadcast
 def _broadcast(fragment):
