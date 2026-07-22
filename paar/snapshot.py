@@ -28,9 +28,11 @@ def _var_info(name, v, accessor, path):
         return VarInfo(name=name, type='?', value=f'<error {e}>', is_error=True,
                        path=path, accessor=accessor)
 
-def snapshot(ns, hidden=frozenset()):
-    "namespace dict -> sorted list[VarInfo], skipping hidden and dunder names."
+def snapshot(ns, hidden=frozenset(), name=None, typ=None):
+    "namespace dict -> sorted list[VarInfo], skipping hidden/dunder; optional name-substring & type-name filters."
     keys = sorted(k for k in ns if k not in hidden and not k.startswith('__'))
+    if name: keys = [k for k in keys if name.lower() in k.lower()]
+    if typ:  keys = [k for k in keys if ns[k].__class__.__name__.lower() == typ.lower()]
     return [_var_info(k, ns[k], (k,), k) for k in keys]
 
 def _walk(ns, accessor):

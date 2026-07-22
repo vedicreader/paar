@@ -95,6 +95,11 @@ as deep as the data goes — e.g. `data` → `'b'` → `[2]` → `'deep'`.
 scrollable, paged table (use the row/col ◀ ▶ controls for data larger than one page). Plain
 containers still expand as a tree.
 
+**Exec, inline edit, and filtering:**
+- **Exec box:** type an expression or statement and press Run — executes in the kernel; tick *Isolated* to evaluate side-effect-free (result shown without writing back to the namespace).
+- **Inline edit:** click any scalar value in the tree to edit it in place; the new value is written back into the kernel namespace immediately.
+- **Filter bar:** narrow the variable list by name substring or type (use the name field and the type dropdown above the table).
+
 ## Across processes and environments
 
 The inspector is not limited to Jupyter. Any plain Python program (in any package or virtualenv)
@@ -131,5 +136,5 @@ $ uv run paar-tui --env train           # pick a specific env by name
 $ uv run paar-tui --url http://host:8000
 ```
 
-Inside the TUI: `1/2/3` switch profile, `g` opens the grid, `e` switches between live environments,
-`r` refreshes, `q` quits.
+Inside the TUI: `/` filters variables, `x` opens a code-exec bar, `1/2/3` switch profile, `g` opens
+the grid, `e` switches between live environments, `r` refreshes, `q` quits.
