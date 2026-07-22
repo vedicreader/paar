@@ -12,8 +12,9 @@ __all__ = ['GRUV', 'Client', 'fmt_row', 'group_label', 'gruvbox_theme', 'EnvScre
 
 # %% ../nbs/08_tui.ipynb #08-c3
 import asyncio, json, argparse
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 import httpx
+from .registry import reg_dir
 
 # Gruvbox-dark palette (https://github.com/morhetz/gruvbox) — the whole UI is keyed off these.
 GRUV = dict(
@@ -33,12 +34,21 @@ def _ws_url(base):
     if b.startswith('http'):  return 'ws'  + b[4:] + '/live'
     return b + '/live'
 
+def _read_token(base):
+    "Owner token for a local server from <reg_dir>/token-<port> (written by serve()/inspector()); None when absent."
+    try:
+        port = urlsplit(base).port
+        return (reg_dir()/f'token-{port}').read_text().strip() or None
+    except Exception: return None
+
 class Client:
     "Async HTTP+WS client for a running in-kernel paar server (see paar.fasthtml)."
-    def __init__(self, base='http://127.0.0.1:8000'):
+    def __init__(self, base='http://127.0.0.1:8000', token=None):
         self.base = base.rstrip('/')
         self.ws_url = _ws_url(self.base)
-        self._http = httpx.AsyncClient(base_url=self.base, timeout=10.0)
+        tok = token if token is not None else _read_token(self.base)
+        self._http = httpx.AsyncClient(base_url=self.base, timeout=10.0,
+                                       headers={'X-Paar-Token': tok} if tok else None)
     async def rows(self, profile=None):
         r = await self._http.get('/api/rows', params={'profile': profile} if profile else None)
         r.raise_for_status(); return r.json()

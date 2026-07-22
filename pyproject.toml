@@ -31,9 +31,13 @@ dependencies = [
 Repository = "https://github.com/vedicreader/paar"
 Documentation = "https://vedicreader.github.io/paar/"
 
+[project.optional-dependencies]
+mcp = ["mcp>=1.2"]
+
 [project.scripts]
 paar-tui = "paar.tui:main"
 paar-serve = "paar.fasthtml:serve_main"
+paar-mcp = "paar.mcp:main"
 
 [project.entry-points.nbdev]
 paar = "paar._modidx:d"
