@@ -94,3 +94,42 @@ as deep as the data goes — e.g. `data` → `'b'` → `[2]` → `'deep'`.
 `arr` (numpy) and `df` (pandas) show a **▦ grid** toggle instead of a tree — click it to open a
 scrollable, paged table (use the row/col ◀ ▶ controls for data larger than one page). Plain
 containers still expand as a tree.
+
+## Across processes and environments
+
+The inspector is not limited to Jupyter. Any plain Python program (in any package or virtualenv)
+can start a background paar server and expose its own live namespace:
+
+``` python
+import paar
+paar.fasthtml.serve()   # inspects the caller's module globals; returns the URL, e.g. http://127.0.0.1:8000
+```
+
+[`serve()`](https://vedicreader.github.io/paar/fasthtml.html#serve) runs the server on a daemon thread and refreshes the view by polling the namespace, so no
+Jupyter kernel or manual nudging is needed. Each server registers itself (by repo/package name) in a
+small local registry, so **multiple environments can run paar at once** and any frontend can discover
+and switch between them.
+
+### From the command line
+
+Run any script under a live inspector — the view updates while the script runs, and the server stays
+up afterwards so you can inspect the final state:
+
+``` sh
+$ uv run paar-serve train.py            # or: uvx --from paar paar-serve train.py
+paar inspector live at http://127.0.0.1:8000   (connect a terminal with: paar-tui)
+```
+
+### Terminal frontend
+
+`paar-tui` is a gruvbox terminal inspector (built with Textual) that connects to any running server —
+useful across environments since it only needs HTTP/WS:
+
+``` sh
+$ uv run paar-tui                       # auto-discovers a running server from the local registry
+$ uv run paar-tui --env train           # pick a specific env by name
+$ uv run paar-tui --url http://host:8000
+```
+
+Inside the TUI: `1/2/3` switch profile, `g` opens the grid, `e` switches between live environments,
+`r` refreshes, `q` quits.

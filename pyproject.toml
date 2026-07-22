@@ -33,6 +33,7 @@ Documentation = "https://vedicreader.github.io/paar/"
 
 [project.scripts]
 paar-tui = "paar.tui:main"
+paar-serve = "paar.fasthtml:serve_main"
 
 [project.entry-points.nbdev]
 paar = "paar._modidx:d"
