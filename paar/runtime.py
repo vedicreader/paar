@@ -47,10 +47,27 @@ def _flat_result(val):
     "A non-expandable result row (isolated mode leaves nothing reachable in user_ns)."
     return VarInfo(name='result', type=type(val).__name__, value=value_str(val))
 
+def _ns_complete(code, pos):
+    "Namespace completion fallback when there is no IPython kernel (headless serve())."
+    import builtins, keyword
+    from paar.bridge import _ns
+    ns = _ns()
+    tok = re.search(r'[\w.]*$', code[:pos]).group(0)
+    if not tok: return {'from': pos, 'matches': []}
+    if '.' in tok:
+        base, _, prefix = tok.rpartition('.')
+        try: obj = eval(base, {'__builtins__': builtins}, ns)     # evaluated in the inspected namespace only
+        except Exception: return {'from': pos, 'matches': []}
+        cands = [a for a in dir(obj) if a.startswith(prefix) and (prefix or not a.startswith('_'))]
+        return {'from': pos - len(prefix), 'matches': sorted(cands)[:50]}
+    names = set(ns) | set(dir(builtins)) | set(keyword.kwlist)
+    cands = [n for n in names if n.startswith(tok)]
+    return {'from': pos - len(tok), 'matches': sorted(cands)[:50]}
+
 def complete(code, pos):
     "IPython completions for the token ending at offset `pos`; full-line context enables `import`/module completion -> {'from': int, 'matches': [str]}."
     ip = get_ipython()
-    if ip is None: return {'from': pos, 'matches': []}
+    if ip is None: return _ns_complete(code, pos)
     bol = code.rfind('\n', 0, pos) + 1                     # current physical line + cursor within it:
     eol = code.find('\n', pos); eol = len(code) if eol < 0 else eol   # gives IPython the `import ...`
     line, cur = code[bol:eol], pos - bol                   # context so venv modules complete too
