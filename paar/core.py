@@ -1,4 +1,4 @@
-"""Fill in a module description here
+"""`VarInfo` — the one row shape every paar frontend consumes
 
 Docs: https://vedicreader.github.io/paar/core.html.md"""
 
