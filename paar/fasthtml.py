@@ -7,8 +7,8 @@ Docs: https://vedicreader.github.io/paar/fasthtml.html.md"""
 # %% auto #0
 __all__ = ['bridge', 'app', 'rt', 'agent_layer', 'home', 'rows', 'expand_route', 'grid_route', 'exec_route', 'complete_route',
            'edit_route', 'set_route', 'sessions_route', 'session_route', 'live', 'api_rows', 'api_expand', 'api_grid',
-           'api_envs', 'api_exec', 'agent_info', 'agent_rows', 'agent_expand', 'agent_grid', 'agent_exec', 'inspector',
-           'serve', 'serve_main']
+           'api_envs', 'api_exec', 'api_sessions', 'api_session', 'agent_info', 'agent_rows', 'agent_expand',
+           'agent_grid', 'agent_exec', 'inspector', 'serve', 'serve_main']
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
 import asyncio, threading, json, secrets, sys, time, atexit, argparse
@@ -496,6 +496,19 @@ def api_exec(req, code:str, scope:str='global'):
     r = run(code, scope if scope in ('global','isolated') else 'global')
     return JSONResponse({'ok': r.ok, 'stdout': r.stdout, 'error': r.error,
                          'result': _vd(r.result) if r.result is not None else None})
+
+@rt('/api/sessions')
+def api_sessions():
+    "Saved session notebooks (current first) as JSON — the terminal sessions browser feed."
+    cur = current_session(); counts = dict(list_sessions())
+    sess = [{'name': cur, 'count': counts.get(cur, 0), 'current': True}]
+    sess += [{'name': s, 'count': n, 'current': False} for s, n in list_sessions() if s != cur]
+    return JSONResponse({'current': cur, 'sessions': sess})
+
+@rt('/api/session')
+def api_session(name:str=''):
+    "Code-cell sources for a saved session as JSON."
+    return JSONResponse({'name': name, 'cells': read_session(name)})
 
 # %% ../nbs/05_fasthtml.ipynb #agent-api-routes
 _POLICY_TEXT = ("agent access: read any variable and create your own (they persist in your overlay layer); "
