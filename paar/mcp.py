@@ -23,7 +23,8 @@ INSTRUCTIONS = (
     "starting with 'blocked:'; rewrite it to bind results to new names instead of changing owner "
     "state (e.g. df2 = df.drop(...) rather than df.drop(..., inplace=True)). "
     "Start with list_vars to see the session, expand/grid to drill into structures cheaply, "
-    "and execute for everything else.")
+    "and execute for everything else. Everything you attempt is transcribed to a session "
+    "notebook the owner can review (its path is in session_info).")
 
 def _base(url=None, env=None):
     "Resolve the target paar server: explicit url > env name in the local registry > the only/first live env."
@@ -79,7 +80,7 @@ def build_mcp(url=None, env=None, name='paar'):
 
     @m.tool(structured_output=False)
     def session_info() -> str:
-        "The connected session's env label, access mode ('restricted' or 'readonly'), policy text, and the overlay names you have created so far."
+        "The connected session's env label, access mode ('restricted' or 'readonly'), policy text, the path of the notebook transcribing your runs, and the overlay names you have created so far."
         return c.get('/agent/api/info')
 
     return m

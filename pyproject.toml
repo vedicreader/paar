@@ -26,7 +26,6 @@ dependencies = [
     "textual>=8.0.0",
     "websockets>=12.0",
     "mcp>=1.2",
-    "clikernel>=0.1.7",
 ]
 
 [project.urls]
@@ -37,7 +36,6 @@ Documentation = "https://vedicreader.github.io/paar/"
 paar-tui = "paar.tui:main"
 paar-serve = "paar.fasthtml:serve_main"
 paar-mcp = "paar.mcp:main"
-paar-exec = "paar.kernel:main"
 
 [project.entry-points.nbdev]
 paar = "paar._modidx:d"

@@ -51,3 +51,6 @@ and still what *they* see.
 - Keep your overlay tidy: meaningful names, since the owner reviews them live.
 - The session may also be inspected/changed by the owner between your calls — re-read rather
   than assume when freshness matters.
+- Every cell you attempt — clean, blocked, or errored — is transcribed to a session notebook
+  the owner can review afterwards (its path is in `session_info`). Assume your runs are on the
+  record: prefer clear, self-contained cells over throwaway one-liners.
