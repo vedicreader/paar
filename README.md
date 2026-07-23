@@ -27,21 +27,19 @@ Docs are hosted on this repo’s [pages](https://vedicreader.github.io/paar/).
 ## Live demo
 
 ``` python
-from paar.fasthtml import inspector
-inspector()          # panel renders inline; keep this cell's output visible
+from paar.fasthtml import serve
+serve()        # panel renders inline; keep this cell's output visible
 ```
 
 <script>
 document.body.addEventListener('htmx:configRequest', (event) => {
     if(event.detail.path.includes('://')) return;
     htmx.config.selfRequestsOnly=false;
-    event.detail.path = `${location.protocol}//${location.hostname}:8000${event.detail.path}`;
+    event.detail.path = `${location.protocol}//${location.hostname}:8001${event.detail.path}`;
 });
 </script>
 
-<a href="http://localhost:8000/" target="_blank">Open in new tab</a>
-
-<iframe src="http://localhost:8000/" style="width: 100%; height: 520px; border: none;" onload="" allow="accelerometer; autoplay; camera; clipboard-read; clipboard-write; display-capture; encrypted-media; fullscreen; gamepad; geolocation; gyroscope; hid; identity-credentials-get; idle-detection; magnetometer; microphone; midi; payment; picture-in-picture; publickey-credentials-get; screen-wake-lock; serial; usb; web-share; xr-spatial-tracking"></iframe> 
+    'http://127.0.0.1:8001'
 
 ``` python
 import math, numpy as np, pandas as pd

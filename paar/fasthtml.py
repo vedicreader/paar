@@ -8,7 +8,9 @@ Docs: https://vedicreader.github.io/paar/fasthtml.html.md"""
 __all__ = ['bridge', 'app', 'rt', 'agent_layer', 'home', 'rows', 'expand_route', 'grid_route', 'exec_route', 'complete_route',
            'edit_route', 'set_route', 'sessions_route', 'session_route', 'live', 'api_rows', 'api_expand', 'api_grid',
            'api_envs', 'api_exec', 'api_sessions', 'api_session', 'agent_info', 'agent_rows', 'agent_expand',
-           'agent_grid', 'agent_exec', 'inspector', 'serve', 'serve_main']
+           'agent_grid', 'agent_exec', 'agent_kernel', 'share', 'kernel_info', 'kernel_exec', 'kernel_rows',
+           'kernel_expand', 'kernel_grid', 'push', 'unshare', 'push_all', 'push_route', 'unpush_route',
+           'push_all_route', 'api_pushed', 'inspector', 'serve', 'serve_main']
 
 # %% ../nbs/05_fasthtml.ipynb #cell-export-imports
 import asyncio, threading, json, secrets, sys, time, atexit, argparse
@@ -371,10 +373,11 @@ def _env_select():
 def home():
     title = f'paar · {_env}' if _env else 'paar'
     head = [_env_select(), _profile_select()]
+    extra = [] if os.environ.get('PAAR_AGENT_WORKER') else [_share_panel()]   # owner-only agent share panel
     return Titled(title, *[h for h in head if h is not None], _exec_bar(), Div(id='exec-out'),
                   _filter_bar(),   # filter sits just above the vars, closer to what it filters
                   Div(_loader(), hx_ext='ws', ws_connect='/live', id='paar'),
-                  _sessions_panel())
+                  _sessions_panel(), *extra)
 
 @rt('/rows')
 def rows(profile:str=None):
@@ -557,6 +560,156 @@ def agent_exec(code:str, scope:str='overlay'):
     return JSONResponse({'ok': r.ok, 'stdout': r.stdout, 'error': r.error, 'scope': scope,
                          'result': _vd(r.result) if r.result is not None else None})
 
+# %% ../nbs/05_fasthtml.ipynb #kernel-api-routes
+import os
+from .kernel import AgentKernel, guarded_run
+
+_kernel = None   # lazily-started isolated agent runtime: a clikernel worker in a separate process
+
+def agent_kernel():
+    "The process-isolated agent kernel (a supervised clikernel worker), or None if not started."
+    return _kernel
+
+def _ensure_kernel():
+    "Start the isolated agent kernel once and have it ride its own paar inspector so the owner can watch it live. No-op inside an agent worker (prevents recursive spawning)."
+    global _kernel
+    if os.environ.get('PAAR_AGENT_WORKER'): return None   # never spawn a kernel from inside an agent worker
+    if _kernel is None:
+        k = AgentKernel(name=f'{_env}-agent' if _env else 'agent').start()
+        try: k.serve_paar(port=R.free_port((_port or 8000)+1))
+        except Exception: pass
+        atexit.register(k.stop); _kernel = k
+    return _kernel
+
+from .snapshot import profile_view, expand as _expand, grid_page
+
+_share = None   # None -> expose all (non-hidden) owner vars read-only; a set -> allowlist; set() -> none
+
+def share(*names, add=False):
+    "Ear-mark which owner variables the isolated agent may see (read-only snapshots). No args returns the current allowlist; names set it (add=True extends); share(None) exposes all."
+    global _share
+    if names == (None,): _share = None
+    elif names: _share = (set(_share or ()) | set(names)) if add else set(names)
+    return _share
+
+def _shared_ns():
+    "Owner namespace restricted to ear-marked names (all non-hidden vars if _share is None)."
+    from paar.bridge import _ns, _hidden
+    hid = set(_hidden())
+    return {k: v for k, v in _ns().items() if k not in hid and (_share is None or k in _share)}
+
+def _shared_ok(accessor):
+    "May the agent drill into this accessor? Its root name must be ear-marked."
+    return _share is None or (bool(accessor) and accessor[0] in _share)
+
+@rt('/kernel/api/info')
+def kernel_info():
+    "Isolated-kernel contract: liveness, env label, ear-marked names, and the policy (separate process; escapes/exec blocked; owner objects unreachable; read-only view of shared owner vars)."
+    k = _kernel
+    return JSONResponse({'alive': bool(k and k.alive()), 'name': k.name if k else None,
+                         'shared': None if _share is None else sorted(_share),
+                         'policy': 'isolated process; destructive file/shell escapes and exec/eval blocked; owner objects unreachable by construction; read-only view of ear-marked owner vars via /kernel/api/rows'})
+
+@rt('/kernel/api/exec')
+def kernel_exec(code:str):
+    "Run agent code in the process-isolated kernel under paar's restriction policy; returns {ok, stdout, error}. Separate from /agent/api (the in-process overlay) -- this never touches the owner's namespace."
+    r = guarded_run(_ensure_kernel(), code)
+    return JSONResponse({'ok': r.ok, 'stdout': r.stdout, 'error': r.error})
+
+@rt('/kernel/api/rows')
+def kernel_rows(profile:str=None):
+    "Read-only snapshot of the owner's namespace (ear-marked names only) for the isolated agent -- rendered copies; nothing here can edit owner state."
+    pf = profile if profile in PROFILES else 'standard'
+    groups = [{'label': lbl, 'nodes': [_vd(v) for v in vs]} for lbl, vs in profile_view(_shared_ns(), frozenset(), pf)]
+    return JSONResponse({'profile': pf, 'profiles': list(PROFILES), 'groups': groups,
+                         'shared': None if _share is None else sorted(_share)})
+
+@rt('/kernel/api/expand')
+def kernel_expand(accessor:str, offset:int=0):
+    "One level of children of an ear-marked owner value (read-only)."
+    from paar.bridge import _ns
+    acc = tuple(json.loads(accessor))
+    return JSONResponse([_vd(v) for v in _expand(_ns(), acc, offset)] if _shared_ok(acc) else [])
+
+@rt('/kernel/api/grid')
+def kernel_grid(accessor:str, roff:int=0, coff:int=0):
+    "A grid page of an ear-marked owner DataFrame/ndarray (read-only)."
+    from paar.bridge import _ns
+    acc = tuple(json.loads(accessor))
+    return JSONResponse(grid_page(_ns(), acc, roff, coff) if _shared_ok(acc) else None)
+
+# ---- owner-initiated PUSH: copy owner vars into the isolated worker (owner's originals never change) ----
+import pickle, base64
+_pushed = set()   # owner var names currently pushed into the worker
+
+def _owner_var_names():
+    "Top-level owner variable names eligible for sharing (non-hidden, non-dunder)."
+    from paar.bridge import _ns, _hidden
+    hid = set(_hidden())
+    return [k for k in _ns() if k not in hid and not k.startswith('__')]
+
+def push(name):
+    "Push a COPY of owner var `name` into the isolated worker (a pickle copy -- your object is never shared). None on success, else an error string."
+    from paar.bridge import _ns
+    if not name.isidentifier(): return f'invalid name {name!r}'
+    ns = _ns()
+    if name not in ns: return f'no owner var {name!r}'
+    try: blob = base64.b64encode(pickle.dumps(ns[name])).decode()
+    except Exception as e: return f'{name}: not copyable ({type(e).__name__})'
+    k = _ensure_kernel()
+    if k is None: return 'agent kernel unavailable'
+    out = k.run(f"import pickle as _p, base64 as _b; {name} = _p.loads(_b.b64decode({blob!r})); del _p, _b")
+    if '<' in out and 'error' in out.lower(): return f'{name}: {out[:120]}'
+    _pushed.add(name); return None
+
+def unshare(name):
+    "Remove a pushed copy from the worker."
+    k = _ensure_kernel()
+    if k is not None and name in _pushed and name.isidentifier():
+        k.run(f"try:\n    del {name}\nexcept NameError: pass")
+    _pushed.discard(name); return None
+
+def push_all():
+    "Push read-only copies of all owner variables into the worker; returns [(name, error), ...] for any that failed."
+    return [(n, e) for n in _owner_var_names() if (e := push(n))]
+
+def _share_panel():
+    "Owner control: push copies of your variables into the agent's isolated session (read-only from your side)."
+    def row(n):
+        on = n in _pushed
+        act = f'/unpush?name={quote(n)}' if on else f'/push?name={quote(n)}'
+        return Label(Input(type='checkbox', checked=on, hx_post=act, hx_target='#share-panel',
+                           hx_swap='outerHTML', hx_headers=_hx_tok()), ' ', n, cls='paar-node')
+    return Details(Summary('Share with agent'),
+                   Div(Button('⇪ share all (read-only)', hx_post='/push_all', hx_target='#share-panel',
+                              hx_swap='outerHTML', hx_headers=_hx_tok()),
+                       *[row(n) for n in _owner_var_names()], cls='paar-children'),
+                   cls='paar-node paar-group', id='share-panel', open=bool(_pushed))
+
+@rt('/push')
+def push_route(req, name:str):
+    "Owner-gated: push a copy of `name` into the worker; returns the refreshed share panel."
+    if _authed(req): push(name)
+    return _share_panel()
+
+@rt('/unpush')
+def unpush_route(req, name:str):
+    "Owner-gated: remove a pushed copy from the worker; returns the refreshed share panel."
+    if _authed(req): unshare(name)
+    return _share_panel()
+
+@rt('/push_all')
+def push_all_route(req):
+    "Owner-gated: push copies of all owner vars into the worker; returns the refreshed share panel."
+    if _authed(req): push_all()
+    return _share_panel()
+
+@rt('/api/pushed')
+def api_pushed():
+    "JSON status: owner vars currently pushed into the worker, and the shareable names."
+    return JSONResponse({'pushed': sorted(_pushed), 'vars': _owner_var_names()})
+
+
 # %% ../nbs/05_fasthtml.ipynb #cell-export-broadcast
 def _broadcast(fragment):
     "Push fragment to every WS client from any thread; drop clients that fail."
@@ -580,7 +733,7 @@ def _poll_loop(interval):
         except Exception: continue
         if cur != last: last = cur; _broadcast(to_xml(_loader(oob=True)))
 
-def inspector(port=8000, height=520, profile='standard', name=None, agent='restricted', token=True):
+def inspector(port=8000, height=520, profile='standard', name=None, agent='restricted', token=True, agent_kernel=True):
     "Start the in-kernel live inspector panel (Jupyter/IPython) and return the inline iframe.\n\n    agent: 'restricted' (default) serves the policy-guarded /agent/api overlay, 'readonly' forces isolated\n    agent exec, 'off' disables the agent surface. token=True mints an owner token (written to\n    <reg_dir>/token-<port>): /exec, /set and /api/exec then require it -- the owner UI and paar-tui\n    pick it up automatically, while agents stay on /agent/api."
     global _server, _port, _env, _profile, _agent_mode
     _profile = profile; _env = R.env_name(name)
@@ -591,9 +744,10 @@ def inspector(port=8000, height=520, profile='standard', name=None, agent='restr
         _server = JupyUvi(app, port=port, daemon=True)
         R.register(_env, port); atexit.register(R.unregister, port)
         on_change(lambda: _broadcast(to_xml(_loader(oob=True))))
+        if agent_kernel and _agent_mode != 'off': _ensure_kernel()
     return HTMX(port=port, height=height, link=True)
 
-def serve(port=8000, ns=None, name=None, poll=0.5, profile='standard', agent='restricted', token=True):
+def serve(port=8000, ns=None, name=None, poll=0.5, profile='standard', agent='restricted', token=True, agent_kernel=True):
     "Start the paar inspector in a background thread for a plain (non-Jupyter) process; returns its base URL.\n\n    ns defaults to the caller's module globals; name defaults to the repo/package/cwd label. Refresh is driven\n    by a poll+diff thread, so any other environment can point paar-tui (or a browser) at the returned URL.\n    agent: 'restricted' (default) serves the policy-guarded /agent/api overlay, 'readonly' forces isolated\n    agent exec, 'off' disables the agent surface. token=True mints an owner token (written to\n    <reg_dir>/token-<port>) gating /exec, /set and /api/exec."
     global _server, _port, _env, _profile, _agent_mode
     if ns is None: ns = sys._getframe(1).f_globals
@@ -606,6 +760,7 @@ def serve(port=8000, ns=None, name=None, poll=0.5, profile='standard', agent='re
         base = f'http://127.0.0.1:{_port}'
         R.register(_env, _port, base); atexit.register(R.unregister, _port)
         threading.Thread(target=_poll_loop, args=(poll,), daemon=True).start()
+        if agent_kernel and _agent_mode != 'off': _ensure_kernel()
     return f'http://127.0.0.1:{_port}'
 
 def serve_main(argv=None):

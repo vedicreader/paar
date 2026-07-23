@@ -49,11 +49,15 @@ def free_port(start=8000, tries=50):
 
 # %% ../nbs/09_registry.ipynb #09-c4
 def _alive(pid):
-    "Is a process with pid running?"
+    "Is a process with pid running and not a zombie? (os.kill(pid,0) also succeeds for a defunct process)."
     try: os.kill(pid, 0)
     except ProcessLookupError: return False
     except PermissionError: return True
     except Exception: return False
+    try:
+        st = subprocess.run(['ps','-o','state=','-p',str(pid)], capture_output=True, text=True, timeout=2).stdout.strip()
+        if st[:1] == 'Z': return False   # zombie/defunct: reads as alive but is dead
+    except Exception: pass
     return True
 
 def register(name, port, base=None):

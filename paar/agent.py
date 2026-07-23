@@ -18,7 +18,10 @@ from .runtime import ExecResult, _exec_capture, _flat_result
 from .snapshot import snapshot, expand, grid_page, profile_view
 from .bridge import _ns
 
-class RuleBlock(Exception):
+try: from clikernel.base import RuleBlock as _RuleBlockBase   # subclass it so clikernel's own `except RuleBlock` catches a paar inspector's block
+except ImportError: _RuleBlockBase = Exception
+
+class RuleBlock(_RuleBlockBase):
     "Raised by an inspector to deliberately block a cell; any other inspector exception is a bug and fails open (clikernel-compatible)."
 
 # %% ../nbs/10_agent.ipynb #10-c5
