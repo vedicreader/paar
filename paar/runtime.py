@@ -64,10 +64,8 @@ def _ns_complete(code, pos):
     cands = [n for n in names if n.startswith(tok)]
     return {'from': pos - len(tok), 'matches': sorted(cands)[:50]}
 
-def complete(code, pos):
-    "IPython completions for the token ending at offset `pos`; full-line context enables `import`/module completion -> {'from': int, 'matches': [str]}."
-    ip = get_ipython()
-    if ip is None: return _ns_complete(code, pos)
+def _ip_complete(ip, code, pos):
+    "Real IPython InteractiveShell.complete(text, line, cursor) -> (pre, matches); None if that signature doesn't apply."
     bol = code.rfind('\n', 0, pos) + 1                     # current physical line + cursor within it:
     eol = code.find('\n', pos); eol = len(code) if eol < 0 else eol   # gives IPython the `import ...`
     line, cur = code[bol:eol], pos - bol                   # context so venv modules complete too
@@ -76,10 +74,22 @@ def complete(code, pos):
     old = getattr(cmp, 'use_jedi', None)
     if cmp is not None: cmp.use_jedi = False
     try: pre, matches = ip.complete(token, line, cur)
-    except Exception: return {'from': pos, 'matches': []}
+    except Exception: return None
     finally:
         if old is not None: cmp.use_jedi = old   # restore so the user's own tab-completion keeps Jedi
     return {'from': pos - len(pre), 'matches': list(matches)[:50]}
+
+def complete(code, pos):
+    "Completions for the token ending at offset `pos` -> {'from': int, 'matches': [str]}. Handles execnb's CaptureShell completer (single-arg, what `serve` runs on), a real IPython kernel, and a headless namespace fallback."
+    ip = get_ipython()
+    if ip is None: return _ns_complete(code, pos)
+    prefix = code[:pos]
+    try: matches = ip.complete(prefix)   # execnb CaptureShell.complete(c) -> [tail matches]
+    except Exception: matches = None
+    if isinstance(matches, list):        # tail after the last dot is what those matches replace
+        tail = re.search(r'[\w.]*$', prefix).group(0).rpartition('.')[-1]
+        return {'from': pos - len(tail), 'matches': matches[:50]}
+    return _ip_complete(ip, code, pos) or {'from': pos, 'matches': []}
 
 SESSION_DIR = Path('paar_sessions')
 _SESSION = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')

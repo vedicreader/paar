@@ -512,6 +512,7 @@ class InspectorApp(App):
         if base and base.rstrip('/') != self.base: await self._switch(base)
         else: self._topbar()
 
+    @work
     async def action_sessions(self):
         "Browse saved sessions; load the chosen past cell into the exec bar."
         code = await self.push_screen_wait(SessionScreen(self.client))
