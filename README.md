@@ -148,8 +148,8 @@ for cell in ('rows.append(99)', 'del threshold', 'rows = []'):
 is untouched and still what you see. You can watch everything the agent has made via
 [`paar.fasthtml.agent_layer()`](https://vedicreader.github.io/paar/fasthtml.html#agent_layer) (assign it to a variable and it shows up, expandable, in your
 own panel), and every cell the agent *attempts* — clean, blocked, or errored — is transcribed
-to `paar_sessions/agent_<stamp>.ipynb` so you can review the whole run afterwards. Server modes: `serve(agent='restricted')` (default), `'readonly'` (every agent
-exec is isolated — nothing persists), or `'off'`. Add your own rules in
+to `paar_sessions/agent_<stamp>.ipynb` so you can review the whole run afterwards. Server modes: `serve(agent='restricted')` (default), `'readonly'` (every agent exec runs in a [safepyrun](https://github.com/AnswerDotAI/safepyrun)
+allowlist sandbox — writes discarded, escapes blocked), or `'off'`. Add your own rules in
 `~/.config/paar/inspectors.py` (or `$PAAR_INSPECTORS`) using clikernel’s file contract:
 define `inspect(tree[, code])` and/or an `inspectors` list; raise
 [`paar.agent.RuleBlock`](https://vedicreader.github.io/paar/agent.html#ruleblock) to refuse a cell.
@@ -215,10 +215,15 @@ These are **guardrails for well-behaved agents, not a sandbox**. Concretely:
   evaded by sufficiently creative code (`getattr` chains, new mutator names, …).
 - The owner token keeps well-behaved tools off the owner endpoints, but any same-user local
   process with shell access could read the token file or the served page.
+- `scope='isolated'` agent exec (and the `agent='readonly'` server mode) runs in a
+  [safepyrun](https://github.com/AnswerDotAI/safepyrun) allowlist sandbox — a real boundary for
+  throwaway code (owner state seeded read-only, writes discarded, `os.system`/`subprocess`
+  refused), though still in-process.
 
-The realistic threat here is an agent *accidentally* clobbering your state — which this
-stops cold. A hard boundary against adversarial code would need a separate process on a copy
-of the data, which defeats the point of a live shared session.
+The realistic threat here is an agent *accidentally* clobbering your state — which the overlay
++ AST list stop cold; for genuinely untrusted throwaway code, reach for `scope='isolated'`
+(safepyrun). A hard *process*-level boundary over live shared objects would defeat the point of a
+live shared session — that’s the deliberate trade-off.
 
 ## Developer guide
 
