@@ -16,6 +16,7 @@
 - The AST policy is "steering for well-behaved agents, NOT a security sandbox" — do not oversell it in docs.
 - Preserve test coverage: net `test_eq`/`assert` count per touched notebook must not drop.
 - fastcore idioms where they genuinely shorten; short one-line docstrings.
+- **Real tests only — no mocks, monkeypatching, or fake shells.** Replace every fake with a real object or real in-process fixture: `NsClient(dict)` for namespaces; a real `IPython.core.interactiveshell.InteractiveShell.instance()` where a live shell is genuinely needed (exec/completion/events); `starlette.testclient.TestClient(app)` for routes (already used); Textual `Pilot` for the TUI; a real in-process paar server for mcp HTTP round-trips. This governs both the tests touched in Phase 1 and the literate-test conversion in Phase 2. Banned patterns to grep for and eliminate: `get_ipython = lambda`, `class _IP`/`_Shell`/`_Sh`/`_CapShell`, `Mock`, `monkeypatch`, hard-coded dead URLs like `http://127.0.0.1:9`.
 
 ### The nbdev cycle ("run the cycle")
 
@@ -24,7 +25,7 @@
 ### This plan supersedes
 
 - `docs/superpowers/plans/2026-07-23-mcp-kernel-switch-and-index.md` — **obsolete** (its `/kernel` target no longer exists). Task 6 retires it.
-- `docs/superpowers/plans/2026-07-23-nbs-consolidation-fastcore.md` — **still valid**; Phase 2 (Task 7) runs it, with the amendment noted there.
+- `docs/superpowers/plans/2026-07-23-nbs-consolidation-fastcore.md` — **still valid**; Phase 2 (Task 7) runs it, with the amendments noted there (safepyrun/policy carry-through **and** the real-tests / Bridge-DI constraint).
 
 ---
 
@@ -198,6 +199,151 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
+## Task 2A: `Bridge` takes a client (dependency injection) + remove the namespace global
+
+**Files:**
+- Modify: `nbs/04_bridge.ipynb` — the export cell (add `IPythonClient`, `NsClient`, rewrite `Bridge`; delete `_ns`/`_hidden`/`_ns_override`/`set_namespace`) and all its test cells (rewrite real via `NsClient`).
+- Modify: `nbs/05_fasthtml.ipynb` — drop `set_namespace` import; module `bridge = Bridge()`; `serve()`/`inspector()` build `Bridge(NsClient(ns))` for headless instead of `set_namespace(ns)`; convert route tests to inject `fasthtml.bridge = Bridge(NsClient({...}))` (remove `_IP`/`get_ipython` patch).
+- Modify: `nbs/10_agent.ipynb` — `AgentSession` default owner switches from `from .bridge import _ns` to `IPythonClient().ns`.
+- Generated: `paar/bridge.py`, `paar/fasthtml.py`, `paar/agent.py`.
+
+**Interfaces:**
+- Produces (module `paar.bridge`): `IPythonClient`, `NsClient`, `Bridge`, `on_change`. **Removed:** `set_namespace`, `_ns`, `_hidden`, `_ns_override`.
+- Client protocol: `ns() -> dict`, `hidden() -> frozenset`, `set_value(accessor, expr) -> None`.
+- `Bridge(client=None)` — defaults to `IPythonClient()`. Methods `snapshot/view/expand/grid/set_value` delegate to `self.client`.
+- Consumes: `snapshot`, `profile_view`, `expand`, `grid_page` (snapshot), `set_value` (runtime), `get_ipython` (IPython).
+
+- [ ] **Step 1: Write the failing real test first (cell in `04_bridge`)**
+
+```python
+#| hide
+import numpy as np
+from fastcore.test import test_eq
+b = Bridge(NsClient({'a': 1, 'arr': np.arange(6).reshape(2,3)}, hidden={'_hidden'}))
+test_eq([r.name for r in b.snapshot()], ['a', 'arr'])          # real namespace, no mock
+test_eq(b.grid(('arr',))['nrows'], 2)
+test_eq([k.name for k in b.expand(('a',))], [])               # scalar has no children
+nb = NsClient({'x': 1}); bb = Bridge(nb); bb.set_value(('x',), '7'); test_eq(nb.ns()['x'], 7)
+```
+
+- [ ] **Step 2: Run it — expect failure**
+
+Run: `uv run nbdev-prepare`. Expected: FAIL (`NsClient`/`Bridge(client)` not defined yet).
+
+- [ ] **Step 3: Implement the clients + Bridge (rewrite the export cell)**
+
+```python
+#| export
+try: from IPython import get_ipython
+except Exception:
+    def get_ipython(): return None
+
+class IPythonClient:
+    "Default namespace source: the live IPython kernel (empty when not in IPython)."
+    def ns(self):     ip = get_ipython(); return ip.user_ns if ip else {}
+    def hidden(self): ip = get_ipython(); return frozenset(getattr(ip, 'user_ns_hidden', ())) if ip else frozenset()
+    def set_value(self, accessor, expr): return set_value(accessor, expr)
+
+class NsClient:
+    "A plain-dict namespace source for headless serve() and real (non-mock) tests."
+    def __init__(self, ns, hidden=frozenset()): self.ns_, self.hidden_ = ns, frozenset(hidden)
+    def ns(self):     return self.ns_
+    def hidden(self): return self.hidden_
+    def set_value(self, accessor, expr): return set_value(accessor, expr, ns=self.ns_)
+
+class Bridge:
+    "Frontend-agnostic access to a namespace via an injected client (defaults to the live IPython kernel)."
+    def __init__(self, client=None): self.client = client or IPythonClient()
+    def snapshot(self, name=None, typ=None): return snapshot(self.client.ns(), self.client.hidden(), name, typ)
+    def view(self, profile='standard'):      return profile_view(self.client.ns(), self.client.hidden(), profile)
+    def expand(self, accessor, offset=0):    return expand(self.client.ns(), accessor, offset)
+    def grid(self, accessor, roff=0, coff=0, rows=50, cols=50): return grid_page(self.client.ns(), accessor, roff, coff, rows, cols)
+    def set_value(self, accessor, expr):     return self.client.set_value(accessor, expr)
+
+def on_change(cb):
+    "Register cb() to fire after each cell execution; returns False outside IPython."
+    ip = get_ipython()
+    if not ip: return False
+    ip.events.register('post_run_cell', lambda res: cb()); return True
+```
+
+- [ ] **Step 4: Make `runtime.set_value` accept an explicit ns**
+
+In `nbs/08_runtime.ipynb`, extend `set_value(accessor, expr, ns=None)` to operate on the given dict (default: the IPython user_ns) so `NsClient.set_value` reuses it. Keep the IPython default path identical. Add a real test using a plain dict (no shell).
+
+- [ ] **Step 5: Rewire fasthtml + agent**
+
+`nbs/05_fasthtml.ipynb`: remove `set_namespace` from the import; keep `bridge = Bridge()` for the in-kernel default; in `serve()`/`inspector()` replace `set_namespace(ns)` with `bridge = Bridge(NsClient(ns))` (rebind the module global). `nbs/10_agent.ipynb`: change the default owner to `IPythonClient().ns` (import `IPythonClient` from `.bridge`).
+
+- [ ] **Step 6: Convert fasthtml route tests to real namespaces**
+
+Replace each `B.get_ipython = lambda: _IP({...})` with `import paar.fasthtml as F; F.bridge = Bridge(NsClient({...}))` before the `TestClient(app)` call; delete the `_IP` fake class. Routes now serve a real namespace over the real test client.
+
+- [ ] **Step 7: Run the cycle**
+
+Run: `uv run nbdev-prepare`. Expected: green; `paar/bridge.py` has `IPythonClient`/`NsClient`/`Bridge(client)` and no `set_namespace`.
+
+- [ ] **Step 8: Verify the global is gone**
+
+```bash
+grep -rn "set_namespace\|_ns_override" nbs/*.ipynb paar/*.py
+```
+Expected: no matches (except perhaps a removed-in-this-task mention). Fix any straggler (e.g. index docs — handled in Task 3).
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add nbs/04_bridge.ipynb nbs/05_fasthtml.ipynb nbs/08_runtime.ipynb nbs/10_agent.ipynb paar/bridge.py paar/fasthtml.py paar/runtime.py paar/agent.py paar/_modidx.py
+git commit -m "refactor(bridge): inject namespace client (Bridge(client)); drop set_namespace global; real tests
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+## Task 2B: Real-test sweep for runtime and remaining fakes
+
+**Files:** `nbs/08_runtime.ipynb` (replace `_Shell`/`_CapShell`), plus any leftover fakes surfaced by the audit in `nbs/01_reprs.ipynb`, `nbs/02_resolvers.ipynb`, `nbs/08_tui.ipynb`.
+
+**Interfaces:** tests only; no public API change.
+
+- [ ] **Step 1: Replace runtime's fake shells with a real InteractiveShell**
+
+In `nbs/08_runtime.ipynb`, delete `class _Shell`/`_CapShell` and the `R.get_ipython = lambda: sh` patches. Use a real shell:
+
+```python
+#| hide
+from IPython.core.interactiveshell import InteractiveShell
+import paar.runtime as R
+_ip = InteractiveShell.instance()          # a real in-process shell
+R.get_ipython = InteractiveShell.instance  # real, not a lambda-mock
+def _fresh():
+    _ip.user_ns.clear(); _ip.user_ns.update(_ip.user_ns_hidden or {}); return _ip
+```
+Rewrite each exec/complete/log/set_value test to seed `_ip.user_ns[...]` and assert against real `run`/`complete`/`set_value` results. `run('1+1')`, completion, and capture now exercise the real IPython machinery.
+
+- [ ] **Step 2: Audit + convert remaining fakes**
+
+```bash
+grep -rnE "get_ipython = lambda|class _IP|_Shell|_Sh\b|_CapShell|Mock|monkeypatch|http://127.0.0.1:9" nbs/*.ipynb
+```
+Convert each remaining hit to a real object/fixture per the Global Constraint. For `nbs/08_tui.ipynb`, prefer a Textual `Pilot` (`async with app.run_test() as pilot`) over stubbed client methods where a stub still remains after Task 4.
+
+- [ ] **Step 3: Run the cycle**
+
+Run: `uv run nbdev-prepare`. Expected: green with real fixtures. If `InteractiveShell.instance()` state bleeds between tests, clear `user_ns` per test.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "test: replace fake shells/mocks with real IPython + fixtures across notebooks
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ## Task 3: Reconcile `index.ipynb` to the single-mechanism story
 
 **Files:** Modify `nbs/index.ipynb` (`idx-overview`, `idx-agents`/`idx-agents-modes`, `idx-mcp`, `idx-security`, and the `idx-clikernel` section); regenerates `README.md`.
@@ -208,9 +354,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 Search and purge references to the removed features:
 ```bash
-grep -niE "isolated kernel|/kernel|AgentKernel|process-isolated|share\(|push\(|two tier|second tier" nbs/index.ipynb
+grep -niE "isolated kernel|/kernel|AgentKernel|process-isolated|share\(|push\(|two tier|second tier|set_namespace" nbs/index.ipynb
 ```
-Delete/rewrite each hit. The story is now ONE mechanism: the overlay `AgentSession`.
+Delete/rewrite each hit. The story is now ONE mechanism: the overlay `AgentSession`. Any `set_namespace(...)` in prose/examples becomes `Bridge(NsClient(ns))` (Task 2A removed the global).
 
 - [ ] **Step 2: Rewrite the agent section around the overlay only**
 
@@ -325,9 +471,11 @@ The Phase 1 edits changed counts in `10_agent`, `08_tui`, `11_mcp`, `index`. Re-
 
 Follow that plan as written (00_core = core+reprs+resolvers+providers; 01_snapshot = grid+snapshot; 02_runtime = runtime+bridge+registry; 03_agent; 04_fasthtml; 05_tui; 06_mcp), `nbdev-prepare`-gated per notebook.
 
-- [ ] **Step 3: Amendment for `03_agent`**
+- [ ] **Step 3: Amendments carried into the merge**
 
-The agent notebook now also carries: the guarded `safepyrun` import + `_run_sync` helper, the simplified `policy_inspectors`, and the safepyrun `isolated` branch. Carry all of these through the merge unchanged; keep the `store_attr`/`first`/`L` fastcore pass from the consolidation plan's Task 4. The `from .bridge import _ns` line becomes `from .runtime import _ns` (bridge merges into runtime) — same as that plan already specifies.
+- **`03_agent`** now also carries: the guarded `safepyrun` import + `_run_sync` helper, the simplified `policy_inspectors`, and the safepyrun `isolated` branch. Carry all through unchanged; keep the `store_attr`/`first`/`L` fastcore pass. The default owner is now `IPythonClient().ns` (Task 2A) — after bridge merges into runtime, import `IPythonClient` from `.runtime`.
+- **`02_runtime`** (absorbs bridge) now contains `IPythonClient`, `NsClient`, `Bridge(client)`, `on_change` — no `set_namespace`/`_ns`/`_hidden`. Update the consolidation plan's runtime task interfaces accordingly.
+- **Literate tests must be real** (Global Constraint): the consolidation plan's "literate test conversion" steps use `NsClient`, a real `InteractiveShell.instance()`, `TestClient(app)`, and Textual `Pilot` — never re-introduce a fake shell while merging.
 
 - [ ] **Step 4: Final verification**
 
@@ -337,7 +485,8 @@ Run the consolidation plan's Task 9 verification (7 notebooks + index, entry poi
 
 ## Self-Review Notes
 
-- **Coverage vs request:** simplify policy (T1), safepyrun hybrid for isolated (T0 spike + T2), index reconcile (T3), stale-remnant cleanup (T4, +T6 retire obsolete plan), mcp wording (T5), consolidation still done (T7). All selected scopes mapped.
+- **Coverage vs request:** simplify policy (T1), safepyrun hybrid for isolated (T0 spike + T2), Bridge client DI + drop `set_namespace` global (T2A), full real-tests / ban-mocks sweep (T2A + T2B + Global Constraint, carried into T7), index reconcile (T3), stale-remnant cleanup (T4, +T6 retire obsolete plan), mcp wording (T5), consolidation still done (T7). All selected scopes mapped.
+- **Bridge DI ordering:** T2A (bridge takes a client, global removed) precedes fasthtml test conversion and Phase 2, since consolidation merges bridge→runtime and inherits the new client API + real tests.
 - **Ordering rationale:** content edits (Phase 1) on stable notebook names first; consolidation (Phase 2) last so it absorbs them once, avoiding rework.
 - **Risk gates:** Task 0 spike de-risks the two safepyrun unknowns (sync wrap + var seeding) before any commit; guarded `try: import safepyrun` keeps the notebook runnable without the optional dep; existing policy tests are the contract for T1; assertion-count guards in T7.
 - **Honesty:** safepyrun is NOT presented as replacing owner-object protection (it can't); it only sandboxes the throwaway `isolated` scope. Docs (T3) keep the "not a security sandbox" framing for the overlay path.
