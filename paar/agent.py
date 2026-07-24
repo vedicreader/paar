@@ -66,11 +66,13 @@ def _root(node):
 def _block(msg): raise RuleBlock(msg)
 
 def _check_del(node, owner):
+    "Refuse `del` of an owner name."
     for t in node.targets:
         r = t.id if isinstance(t, ast.Name) else _root(t)
         if r in owner: _block(f"cannot delete owner variable '{r}'; you may only delete names you created")
 
 def _check_assign(node, owner):
+    "Refuse in-place rebind (attr/item target) or augmented-assign of an owner object."
     tgts = node.targets if isinstance(node, ast.Assign) else [node.target]
     for t in tgts:
         for u in ast.walk(t):   # covers tuple/list unpacking targets
@@ -81,28 +83,31 @@ def _check_assign(node, owner):
         _block(f"'{node.target.id} += ...' may mutate the owner's object in place; use a new name, e.g. {node.target.id}2 = {node.target.id} + ...")
 
 def _check_call(node, owner):
+    "Refuse escapes (exec/eval/os.system/...) and owner-mutating method calls."
     f = node.func
     if isinstance(f, ast.Name) and f.id in _BLOCKED_CALLS:
         _block(f"call to '{f.id}' is not allowed in the agent session")
-    if isinstance(f, ast.Attribute):
-        r = _root(f.value)
-        if r == 'subprocess' or (isinstance(f.value, ast.Name) and (f.value.id, f.attr) in _DESTRUCTIVE):
-            _block(f"'{r}.{f.attr}' is a shell/filesystem escape and is not allowed in the agent session; use your own shell tool")
-        if f.attr in _DESTRUCTIVE_ATTRS:
-            _block(f"'.{f.attr}()' deletes resources and is not allowed in the agent session")
-        if f.attr in _MUTATORS and r in owner:
-            _block(f"'.{f.attr}()' would mutate owner variable '{r}'; copy it to a new name first")
-        if r in owner and any(k.arg == 'inplace' and getattr(k.value, 'value', None) is True for k in node.keywords):
-            _block(f"inplace=True would mutate owner variable '{r}'; drop inplace and bind the result to a new name")
+    if not isinstance(f, ast.Attribute): return
+    r = _root(f.value)
+    if r == 'subprocess' or (isinstance(f.value, ast.Name) and (f.value.id, f.attr) in _DESTRUCTIVE):
+        _block(f"'{r}.{f.attr}' is a shell/filesystem escape and is not allowed in the agent session; use your own shell tool")
+    if f.attr in _DESTRUCTIVE_ATTRS:
+        _block(f"'.{f.attr}()' deletes resources and is not allowed in the agent session")
+    if f.attr in _MUTATORS and r in owner:
+        _block(f"'.{f.attr}()' would mutate owner variable '{r}'; copy it to a new name first")
+    if r in owner and any(k.arg == 'inplace' and getattr(k.value, 'value', None) is True for k in node.keywords):
+        _block(f"inplace=True would mutate owner variable '{r}'; drop inplace and bind the result to a new name")
+
+_CHECKS = {ast.Delete: _check_del, ast.Assign: _check_assign,
+           ast.AugAssign: _check_assign, ast.AnnAssign: _check_assign, ast.Call: _check_call}
 
 def policy_inspectors(owner_names):
     "The default restriction list, closed over `owner_names` (a callable giving the currently protected names): agents may read owner variables and create their own; deleting, rebinding in place, or mutating owner state — and destructive file/shell escapes — are blocked."
     def guard(tree, code):
         owner = owner_names()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Delete): _check_del(node, owner)
-            elif isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)): _check_assign(node, owner)
-            elif isinstance(node, ast.Call): _check_call(node, owner)
+            chk = _CHECKS.get(type(node))
+            if chk: chk(node, owner)
             elif isinstance(node, ast.Attribute) and node.attr in ('__dict__', '__globals__') and _root(node) in owner:
                 _block(f"direct '{node.attr}' access on owner objects is not allowed")
         return None
