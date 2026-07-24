@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import quote
 from fasthtml.common import *
 from fasthtml.jupyter import JupyUvi, HTMX
-from .bridge import Bridge, on_change, set_namespace
+from .bridge import Bridge, NsClient, on_change
 from .core import VarInfo
 from .snapshot import PROFILES
 from .runtime import run, complete, list_sessions, read_session, current_session
@@ -399,7 +399,7 @@ def exec_route(req, code:str, scope:str='global'):
 
 @rt('/complete')
 def complete_route(code:str='', pos:int=0):
-    return JSONResponse(complete(code, pos))
+    return JSONResponse(complete(code, pos, ns=bridge.client.ns()))
 
 @rt('/edit')
 def edit_route(accessor:str):
@@ -599,9 +599,9 @@ def inspector(port=8000, height=520, profile='standard', name=None, agent='restr
 
 def serve(port=8000, ns=None, name=None, poll=0.5, profile='standard', agent='restricted', token=True):
     "Start the paar inspector in a background thread for a plain (non-Jupyter) process; returns its base URL.\n\n    ns defaults to the caller's module globals; name defaults to the repo/package/cwd label. Refresh is driven\n    by a poll+diff thread, so any other environment can point paar-tui (or a browser) at the returned URL.\n    agent: 'restricted' (default) serves the policy-guarded /agent/api overlay, 'readonly' forces isolated\n    agent exec, 'off' disables the agent surface. token=True mints an owner token (written to\n    <reg_dir>/token-<port>) gating /exec, /set and /api/exec."
-    global _server, _port, _env, _profile, _agent_mode
+    global _server, _port, _env, _profile, _agent_mode, bridge
     if ns is None: ns = sys._getframe(1).f_globals
-    set_namespace(ns); _profile = profile; _env = R.env_name(name, ns)
+    bridge = Bridge(NsClient(ns)); _profile = profile; _env = R.env_name(name, ns)
     _agent_mode = agent if agent in ('restricted', 'readonly', 'off') else 'restricted'
     if _server is None:
         _port = R.free_port(port)

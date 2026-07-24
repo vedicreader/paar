@@ -181,12 +181,12 @@ before its first call.
 
 ## A fully local agent: rishi driving a session
 
-MCP is one transport over the overlay, not the only one. [`agent_tools`](https://vedicreader.github.io/paar/agent.html#agent_tools) wraps an
+MCP is one transport over the overlay, not the only one. `agent_tools(session)` wraps an
 [`AgentSession`](https://vedicreader.github.io/paar/agent.html#agentsession) as plain functions any tool-calling agent can use, so a local
 [rishi](https://github.com/vedicreader/rishi) `Chat` (on-device Gemma, no API keys, no
-server) can work inside your session directly. [`conversation_logger`](https://vedicreader.github.io/paar/agent.html#conversation_logger) mirrors the
-conversation’s prose into the *same* transcript notebook the tools write their code cells to —
-so one notebook becomes the whole runnable history of the exchange:
+server) can work inside your session directly. `conversation_logger(session)` mirrors the
+conversation’s prose into the *same* transcript notebook the tools write their code cells to
+— so one notebook becomes the whole runnable history of the exchange:
 
 ``` python
 from paar.agent import AgentSession, agent_tools, conversation_logger

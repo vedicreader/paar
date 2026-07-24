@@ -47,11 +47,9 @@ def _flat_result(val):
     "A non-expandable result row (isolated mode leaves nothing reachable in user_ns)."
     return VarInfo(name='result', type=type(val).__name__, value=value_str(val))
 
-def _ns_complete(code, pos):
-    "Namespace completion fallback when there is no IPython kernel (headless serve())."
+def _ns_complete(code, pos, ns):
+    "Namespace completion fallback against `ns` when there is no IPython kernel (headless serve())."
     import builtins, keyword
-    from paar.bridge import _ns
-    ns = _ns()
     tok = re.search(r'[\w.]*$', code[:pos]).group(0)
     if not tok: return {'from': pos, 'matches': []}
     if '.' in tok:
@@ -79,10 +77,10 @@ def _ip_complete(ip, code, pos):
         if old is not None: cmp.use_jedi = old   # restore so the user's own tab-completion keeps Jedi
     return {'from': pos - len(pre), 'matches': list(matches)[:50]}
 
-def complete(code, pos):
-    "Completions for the token ending at offset `pos` -> {'from': int, 'matches': [str]}. Handles execnb's CaptureShell completer (single-arg, what `serve` runs on), a real IPython kernel, and a headless namespace fallback."
+def complete(code, pos, ns=None):
+    "Completions for the token ending at offset `pos` -> {'from': int, 'matches': [str]}. Handles execnb's CaptureShell completer (single-arg, what `serve` runs on), a real IPython kernel, and a headless namespace fallback over `ns`."
     ip = get_ipython()
-    if ip is None: return _ns_complete(code, pos)
+    if ip is None: return _ns_complete(code, pos, ns or {})
     prefix = code[:pos]
     try: matches = ip.complete(prefix)   # execnb CaptureShell.complete(c) -> [tail matches]
     except Exception: matches = None
@@ -148,14 +146,16 @@ def run(code, scope='global'):
     result = _var_info('result', res.result, ('_',), '_') if res.result is not None else None
     return ExecResult(ok=bool(res.success) and err is None, result=result, stdout=cap.stdout, error=err)
 
-def set_value(accessor, expr):
-    "Assign `expr` (evaluated in user_ns) to the lvalue at `accessor`; return error text or None."
-    ip = get_ipython()
-    if ip is None: return 'no IPython kernel'
-    try: _, path = _walk(ip.user_ns, tuple(accessor))
+def set_value(accessor, expr, ns=None):
+    "Assign `expr` (evaluated in `ns`, default the IPython user_ns) to the lvalue at `accessor`; return error text or None."
+    if ns is None:
+        ip = get_ipython()
+        if ip is None: return 'no IPython kernel'
+        ns = ip.user_ns
+    try: _, path = _walk(ns, tuple(accessor))
     except Exception as e: return f'bad accessor: {e}'
     try:
-        exec(f'{path} = ({expr})', ip.user_ns)
+        exec(f'{path} = ({expr})', ns)
         return None
     except Exception as e:
         return f'{type(e).__name__}: {e}'

@@ -12,19 +12,16 @@ __all__ = ['RuleBlock', 'load_inspectors', 'run_inspectors', 'policy_inspectors'
            'agent_tools', 'conversation_logger']
 
 # %% ../nbs/10_agent.ipynb #10-c4
-import ast, os, runpy, inspect, datetime
+import ast, os, runpy, inspect, datetime, asyncio
 from pathlib import Path
 from IPython.utils.capture import capture_output
 import paar.runtime as _rt
 from .runtime import ExecResult, log_run, _exec_capture, _flat_result
 from .snapshot import snapshot, expand, grid_page, profile_view
-from .bridge import _ns
+from .bridge import IPythonClient
 
-try: from clikernel.base import RuleBlock as _RuleBlockBase   # subclass it so clikernel's own `except RuleBlock` catches a paar inspector's block
-except ImportError: _RuleBlockBase = Exception
-
-class RuleBlock(_RuleBlockBase):
-    "Raised by an inspector to deliberately block a cell; any other inspector exception is a bug and fails open (clikernel-compatible)."
+class RuleBlock(Exception):
+    "Raised by an inspector to deliberately block a cell; any other inspector exception is a bug, and fails open"
 
 # %% ../nbs/10_agent.ipynb #10-c5
 def load_inspectors(path=None):
@@ -112,7 +109,6 @@ def policy_inspectors(owner_names):
     return [guard]
 
 # %% ../nbs/10_agent.ipynb #e91ebf90
-import asyncio
 def run_coro(coro):
     "Run an awaitable to completion from sync code, even inside a running event loop."
     try: asyncio.get_running_loop()
@@ -143,7 +139,7 @@ class AgentSession:
                  owner=None,   # callable -> namespace dict to protect (default: paar's inspected namespace)
                  rules=None,   # extra inspectors appended to the default policy (default: load_inspectors())
                  log=True):    # transcript notebook: True -> paar_sessions/agent_<stamp>.ipynb, a path -> that file, False -> off
-        self.owner = owner if owner is not None else _ns
+        self.owner = owner if owner is not None else IPythonClient().ns
         self.layer = {}   # names the agent created (or shadowed)
         self.ns = {}      # persistent exec globals: owner view + layer
         self.inspectors = policy_inspectors(self.owner_names) + (load_inspectors() if rules is None else list(rules))
