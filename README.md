@@ -132,7 +132,7 @@ or delete what you made.** It works standalone too:
 from paar.agent import AgentSession
 
 yours = {'rows': [1, 2, 3], 'threshold': 2}          # stand-in for your live namespace
-agent = AgentSession(owner=lambda: yours, rules=[])  # rules=[]: skip any local inspectors.py
+agent = AgentSession(owner=lambda: yours, rules=[], log=False)  # rules=[]: skip local inspectors; log=False: no transcript file
 
 agent.run('kept = [r for r in rows if r >= threshold]')   # reads yours, creates its own
 agent.layer
@@ -147,7 +147,8 @@ for cell in ('rows.append(99)', 'del threshold', 'rows = []'):
 `'rows = []'` succeeded — as a *shadow*: the agent now has its own [`rows`](https://vedicreader.github.io/paar/fasthtml.html#rows), while `yours`
 is untouched and still what you see. You can watch everything the agent has made via
 [`paar.fasthtml.agent_layer()`](https://vedicreader.github.io/paar/fasthtml.html#agent_layer) (assign it to a variable and it shows up, expandable, in your
-own panel). Server modes: `serve(agent='restricted')` (default), `'readonly'` (every agent
+own panel), and every cell the agent *attempts* — clean, blocked, or errored — is transcribed
+to `paar_sessions/agent_<stamp>.ipynb` so you can review the whole run afterwards. Server modes: `serve(agent='restricted')` (default), `'readonly'` (every agent
 exec is isolated — nothing persists), or `'off'`. Add your own rules in
 `~/.config/paar/inspectors.py` (or `$PAAR_INSPECTORS`) using clikernel’s file contract:
 define `inspect(tree[, code])` and/or an `inspectors` list; raise
@@ -178,37 +179,31 @@ URL instead. The server resolves its target per call, so start order doesn’t m
 `~/.claude/skills/` (or your agent’s skill directory) so the agent knows the etiquette
 before its first call.
 
-## Pairing with clikernel: watching the agent’s own session
+## A fully local agent: rishi driving a session
 
-The mirror-image setup: while `paar-mcp` lets an agent into *your* session, paar can also ride
-inside the agent’s **[clikernel](https://github.com/AnswerDotAI/clikernel)** worker — the
-persistent Python process Claude Code/Codex use as their workbench — so *you* can watch and
-steer *their* session live.
-
-clikernel runs `~/.config/clikernel/startup.py` inside the worker via `%run -i`, which is all
-paar needs:
+MCP is one transport over the overlay, not the only one. [`agent_tools`](https://vedicreader.github.io/paar/agent.html#agent_tools) wraps an
+[`AgentSession`](https://vedicreader.github.io/paar/agent.html#agentsession) as plain functions any tool-calling agent can use, so a local
+[rishi](https://github.com/vedicreader/rishi) `Chat` (on-device Gemma, no API keys, no
+server) can work inside your session directly. [`conversation_logger`](https://vedicreader.github.io/paar/agent.html#conversation_logger) mirrors the
+conversation’s prose into the *same* transcript notebook the tools write their code cells to —
+so one notebook becomes the whole runnable history of the exchange:
 
 ``` python
-# ~/.config/clikernel/startup.py — runs inside every clikernel worker
-import os
-import paar.fasthtml
-paar.fasthtml.serve(port=8001, name=os.environ.get('PAAR_ENV_NAME', 'claude'))
+from paar.agent import AgentSession, agent_tools, conversation_logger
+from rishi import Chat, hitl_policy
+
+sess = AgentSession()                                  # overlay on your live namespace
+chat = Chat(tools=agent_tools(sess),                   # list_vars + run_python, bound to the session
+            approve=hitl_policy({'list_vars': 'approved', 'run_python': 'check'}))
+chat.add_cb(conversation_logger(sess))                 # prose turns -> the same notebook as the code
+
+chat("Which numeric columns does df have? Build df_norm with them scaled to 0..1.")
+print(sess.log_path)   # agent_<stamp>.ipynb: markdown turns interleaved with every line the agent ran
 ```
 
-- **Two sessions, two ports**: your kernel on `inspector(port=8000)`, the agent’s worker on
-  8001 ([`serve`](https://vedicreader.github.io/paar/fasthtml.html#serve) auto-bumps if taken). Both register in the local registry, so `paar-tui`’s
-  `e` key or the web env dropdown flips between *you* and *claude*.
-- **Naming**: set `PAAR_ENV_NAME=claude` / `PAAR_ENV_NAME=codex` in each client’s MCP server
-  config for clikernel, so the one startup.py labels every worker correctly.
-- **Restarts survive**: clikernel’s `restart` tool spawns a fresh worker, which re-runs
-  startup.py — the inspector comes back by itself.
-- **One rules file, two enforcers**: paar’s inspectors use clikernel’s exact contract
-  (`inspect(tree[, code])`, `inspectors`, [`RuleBlock`](https://vedicreader.github.io/paar/agent.html#ruleblock)), so the restriction list you write for
-  the agent’s own kernel (`~/.config/clikernel/inspectors.py`) can be reused for its access
-  to your session (`~/.config/paar/inspectors.py`).
-
-Full circle: Claude works in its clikernel on 8001 while reaching into your 8000 session
-read-and-create-only via `paar-mcp` — and you see both, live, from one TUI.
+Two safety layers stack: rishi’s `hitl_policy` gates each tool call *before* it runs, and any
+approved `run_python` cell still passes paar’s AST restriction list — writes land in the agent
+layer, your namespace is never touched.
 
 ## Security model (honest edition)
 

@@ -77,12 +77,6 @@ class Client:
         "Run code on the server; returns {ok, result, stdout, error} (see /api/exec)."
         r = await self._http.get('/api/exec', params={'code': code, 'scope': scope})
         r.raise_for_status(); return r.json()
-    async def share(self, name):
-        "Push a read-only copy of owner var `name` into the agent's isolated worker (owner /push endpoint)."
-        r = await self._http.post('/push', params={'name': name}); r.raise_for_status(); return r.text
-    async def share_all(self):
-        "Push read-only copies of all owner vars into the agent's isolated worker (owner /push_all endpoint)."
-        r = await self._http.post('/push_all'); r.raise_for_status(); return r.text
     async def aclose(self): await self._http.aclose()
 
 # %% ../nbs/08_tui.ipynb #08-c4
@@ -238,8 +232,6 @@ class InspectorApp(App):
         Binding('g', 'toggle_grid', 'grid'),
         Binding('e', 'switch_env', 'env'),
         Binding('s', 'sessions', 'sessions'),
-        Binding('p', 'share_selected', 'share→agent'),
-        Binding('a', 'share_all', 'share all'),
         Binding('escape', 'hide_panels', 'close', show=False),
         Binding('1', "profile('minimal')", 'min'),
         Binding('2', "profile('standard')", 'std'),
@@ -419,19 +411,6 @@ class InspectorApp(App):
         self.profile = name; await self._reload()
 
     async def action_refresh(self): await self._reload()
-
-    async def action_share_selected(self):
-        "Push the selected variable into the agent's isolated worker as a read-only copy."
-        acc = self._cursor_acc()
-        if not acc: self.notify('select a variable first'); return
-        name = acc[0]
-        try: await self.client.share(name); self.notify(f'shared {name} → agent (read-only copy)')
-        except Exception as e: self.notify(f'share failed: {e}', severity='error')
-
-    async def action_share_all(self):
-        "Push read-only copies of all owner variables into the agent's isolated worker."
-        try: await self.client.share_all(); self.notify('shared all vars → agent (read-only copies)')
-        except Exception as e: self.notify(f'share all failed: {e}', severity='error')
 
     # -- filter + exec --------------------------------------------------------
     def action_focus_filter(self):

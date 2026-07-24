@@ -100,28 +100,30 @@ def _session_path():
 
 def current_session(): return f'session_{_SESSION}'
 
-def log_run(code):
-    "Append `code` as a code cell to this session's notebook (best-effort; never raises)."
+def log_run(code, path=None, cell_type='code'):
+    "Append `code` as a cell to a session notebook (default: this owner session's; best-effort, never raises)."
     try:
-        p = _session_path()
+        p = Path(path) if path else _session_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
         nb = read_nb(p) if p.exists() else new_nb([])
-        nb['cells'].append(mk_cell(code))
+        nb['cells'].append(mk_cell(code, cell_type))
         write_nb(nb, p)
     except Exception: pass
 
 def list_sessions():
-    "Saved session notebooks, newest first, as [(stem, n_code_cells)]."
+    "Saved session notebooks (owner `session_*` and agent `agent_*`), newest first, as [(stem, n_code_cells)]."
     if not SESSION_DIR.exists(): return []
     out = []
-    for p in sorted(SESSION_DIR.glob('session_*.ipynb'), reverse=True):
+    for p in sorted([*SESSION_DIR.glob('session_*.ipynb'), *SESSION_DIR.glob('agent_*.ipynb')],
+                    key=lambda p: p.name, reverse=True):
         try: n = sum(c.get('cell_type')=='code' for c in read_nb(p)['cells'])
         except Exception: n = 0
         out.append((p.stem, n))
     return out
 
 def read_session(name):
-    "Code-cell sources for session `name` (a session_* stem); [] if missing or name is unsafe."
-    if '/' in name or chr(92) in name or not name.startswith('session_'): return []
+    "Code-cell sources for session `name` (a session_*/agent_* stem); [] if missing or name is unsafe."
+    if '/' in name or chr(92) in name or not name.startswith(('session_', 'agent_')): return []
     p = SESSION_DIR/f'{name}.ipynb'
     if not p.exists(): return []
     try: return [c['source'] for c in read_nb(p)['cells'] if c.get('cell_type')=='code']
